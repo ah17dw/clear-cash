@@ -2,87 +2,123 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Clean financial app palette - trustworthy teal/blue with clear semantic colors */
+    --background: 210 20% 98%;
+    --foreground: 220 25% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 220 25% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 220 25% 10%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary: Trustworthy teal */
+    --primary: 175 65% 35%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary: Soft neutral */
+    --secondary: 210 15% 93%;
+    --secondary-foreground: 220 25% 20%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 210 15% 95%;
+    --muted-foreground: 220 10% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 175 50% 92%;
+    --accent-foreground: 175 65% 25%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Semantic colors for finance */
+    --success: 152 60% 38%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 38 92% 50%;
+    --warning-foreground: 38 92% 15%;
+    
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Savings green */
+    --savings: 152 60% 38%;
+    --savings-foreground: 0 0% 100%;
+    --savings-muted: 152 45% 94%;
 
-    --radius: 0.5rem;
+    /* Debt coral */
+    --debt: 0 72% 51%;
+    --debt-foreground: 0 0% 100%;
+    --debt-muted: 0 60% 95%;
 
+    --border: 210 20% 88%;
+    --input: 210 20% 88%;
+    --ring: 175 65% 35%;
+
+    --radius: 0.75rem;
+
+    /* Navigation */
+    --nav-background: 0 0% 100%;
+    --nav-foreground: 220 10% 45%;
+    --nav-active: 175 65% 35%;
+
+    /* Sidebar (keeping for compatibility) */
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 220 25% 8%;
+    --foreground: 210 20% 95%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 220 25% 12%;
+    --card-foreground: 210 20% 95%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 220 25% 12%;
+    --popover-foreground: 210 20% 95%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 175 55% 45%;
+    --primary-foreground: 220 25% 8%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 220 20% 18%;
+    --secondary-foreground: 210 20% 90%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 220 20% 15%;
+    --muted-foreground: 210 15% 55%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 175 40% 20%;
+    --accent-foreground: 175 55% 85%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --success: 152 55% 45%;
+    --success-foreground: 152 55% 10%;
+    
+    --warning: 38 85% 55%;
+    --warning-foreground: 38 85% 10%;
+    
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --savings: 152 55% 45%;
+    --savings-foreground: 152 55% 10%;
+    --savings-muted: 152 30% 15%;
+
+    --debt: 0 65% 55%;
+    --debt-foreground: 0 0% 100%;
+    --debt-muted: 0 40% 15%;
+
+    --border: 220 20% 20%;
+    --input: 220 20% 20%;
+    --ring: 175 55% 45%;
+
+    --nav-background: 220 25% 10%;
+    --nav-foreground: 210 15% 55%;
+    --nav-active: 175 55% 45%;
+
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -100,6 +136,118 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'DM Sans', system-ui, sans-serif;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-muted/50;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+}
+
+@layer components {
+  /* Large number displays for financial data */
+  .amount-large {
+    @apply text-3xl font-semibold tracking-tight;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .amount-medium {
+    @apply text-xl font-medium tracking-tight;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .amount-small {
+    @apply text-base font-medium;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Semantic amount colors */
+  .amount-positive {
+    @apply text-savings;
+  }
+
+  .amount-negative {
+    @apply text-debt;
+  }
+
+  .amount-neutral {
+    @apply text-foreground;
+  }
+
+  /* Card variants */
+  .finance-card {
+    @apply bg-card rounded-xl border border-border p-4 shadow-sm;
+  }
+
+  .finance-card-savings {
+    @apply bg-savings-muted border-savings/20;
+  }
+
+  .finance-card-debt {
+    @apply bg-debt-muted border-debt/20;
+  }
+
+  /* Alert badge styles */
+  .alert-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+
+  .alert-badge-warning {
+    @apply bg-warning/15 text-warning-foreground border border-warning/30;
+  }
+
+  .alert-badge-danger {
+    @apply bg-destructive/15 text-destructive border border-destructive/30;
+  }
+
+  .alert-badge-info {
+    @apply bg-primary/15 text-primary border border-primary/30;
+  }
+
+  /* Safe area for mobile bottom nav */
+  .safe-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 1rem);
+  }
+
+  /* Page container with bottom nav space */
+  .page-container {
+    @apply min-h-screen pb-24 px-4 pt-4;
+  }
+
+  /* List item hover state */
+  .list-item-interactive {
+    @apply transition-colors hover:bg-muted/50 active:bg-muted;
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Touch-friendly tap target */
+  .tap-target {
+    @apply min-h-[44px] min-w-[44px];
   }
 }
