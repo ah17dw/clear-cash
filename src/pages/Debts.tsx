@@ -109,41 +109,68 @@ export default function Debts() {
             const daysUntilPromoEnds = debt.promo_end_date 
               ? getDaysUntil(debt.promo_end_date) 
               : null;
-            
+            const startingBalance = Number(debt.starting_balance) || Number(debt.balance);
+            const currentBalance = Number(debt.balance);
+            const paidOff = startingBalance - currentBalance;
+            const progress = startingBalance > 0 ? Math.min(100, Math.max(0, (paidOff / startingBalance) * 100)) : 0;
+            const monthlyPayment = Number(debt.planned_payment ?? debt.minimum_payment ?? 0);
+
             return (
               <button
                 key={debt.id}
                 onClick={() => navigate(`/debts/${debt.id}`)}
-                className="w-full finance-card flex items-center gap-3 list-item-interactive animate-fade-in"
+                className="w-full finance-card flex flex-col gap-2 list-item-interactive animate-fade-in"
                 style={{ animationDelay: `${index * 30}ms` }}
               >
-                <div className="flex-1 text-left min-w-0">
-                  <p className="font-medium truncate">{debt.name}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                    {debt.lender && <span className="truncate">{debt.lender}</span>}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 text-left min-w-0">
+                    <p className="font-medium truncate">{debt.name}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                      {debt.lender && <span className="truncate">{debt.lender}</span>}
+                    </div>
                   </div>
+
+                  <div className="text-right flex-shrink-0">
+                    <AmountDisplay amount={currentBalance} size="sm" />
+                    <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                      {debt.is_promo_0 ? (
+                        <span className="alert-badge alert-badge-info text-[10px] px-1.5 py-0.5">
+                          0%
+                          {daysUntilPromoEnds !== null && daysUntilPromoEnds <= 90 && (
+                            <span className="ml-1">{daysUntilPromoEnds}d</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                          <Percent className="h-3 w-3" />
+                          {debt.apr}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 </div>
 
-                <div className="text-right flex-shrink-0">
-                  <AmountDisplay amount={Number(debt.balance)} size="sm" />
-                  <div className="flex items-center justify-end gap-1.5 mt-0.5">
-                    {debt.is_promo_0 ? (
-                      <span className="alert-badge alert-badge-info text-[10px] px-1.5 py-0.5">
-                        0%
-                        {daysUntilPromoEnds !== null && daysUntilPromoEnds <= 90 && (
-                          <span className="ml-1">{daysUntilPromoEnds}d</span>
-                        )}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                        <Percent className="h-3 w-3" />
-                        {debt.apr}%
-                      </span>
-                    )}
+                {/* Progress bar and monthly payment */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary rounded-full transition-all duration-300"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {progress.toFixed(0)}% paid off
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xs font-medium">
+                      £{monthlyPayment.toFixed(2)}<span className="text-muted-foreground font-normal">/mo</span>
+                    </p>
                   </div>
                 </div>
-
-                <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
               </button>
             );
           })}
