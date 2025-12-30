@@ -31,6 +31,8 @@ export default function Debts() {
   });
 
   const totalDebt = debts?.reduce((sum, d) => sum + Number(d.balance), 0) ?? 0;
+  const totalMinimums = debts?.reduce((sum, d) => sum + Number(d.minimum_payment || 0), 0) ?? 0;
+  const totalPlanned = debts?.reduce((sum, d) => sum + Number(d.planned_payment ?? d.minimum_payment ?? 0), 0) ?? 0;
 
   return (
     <div className="page-container">
@@ -44,6 +46,21 @@ export default function Debts() {
       <div className="finance-card finance-card-debt mb-4">
         <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Debt</p>
         <AmountDisplay amount={totalDebt} size="lg" className="text-debt" />
+      </div>
+
+      {/* Monthly Outgoings Summary */}
+      <div className="finance-card mb-4">
+        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Monthly Debt Outgoings</p>
+        <AmountDisplay amount={totalMinimums} size="lg" />
+        <p className="text-xs text-muted-foreground mt-1">Sum of minimum monthly payments</p>
+        {totalPlanned !== totalMinimums && (
+          <div className="mt-3 pt-3 border-t border-border">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Planned payments total</span>
+              <AmountDisplay amount={totalPlanned} size="sm" />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Sort Options */}
