@@ -37,6 +37,7 @@ const debtSchema = z.object({
   post_promo_apr: z.coerce.number().min(0).max(100).optional(),
   payment_day: z.coerce.number().min(1).max(28).optional(),
   minimum_payment: z.coerce.number().min(0),
+  minimum_payment_is_percentage: z.boolean(),
   planned_payment: z.coerce.number().min(0).optional(),
   notes: z.string().optional(),
 });
@@ -76,12 +77,15 @@ export function DebtFormSheet({ open, onOpenChange, debt }: DebtFormSheetProps) 
       post_promo_apr: undefined,
       payment_day: undefined,
       minimum_payment: 0,
+      minimum_payment_is_percentage: false,
       planned_payment: undefined,
       notes: '',
     },
   });
 
   const isPromo = watch('is_promo_0');
+  const isPercentage = watch('minimum_payment_is_percentage');
+  const balance = watch('balance');
 
   useEffect(() => {
     if (debt) {
@@ -98,6 +102,7 @@ export function DebtFormSheet({ open, onOpenChange, debt }: DebtFormSheetProps) 
         post_promo_apr: debt.post_promo_apr ? Number(debt.post_promo_apr) : undefined,
         payment_day: debt.payment_day ?? undefined,
         minimum_payment: Number(debt.minimum_payment),
+        minimum_payment_is_percentage: false,
         planned_payment: debt.planned_payment ? Number(debt.planned_payment) : undefined,
         notes: debt.notes ?? '',
       });
@@ -115,6 +120,7 @@ export function DebtFormSheet({ open, onOpenChange, debt }: DebtFormSheetProps) 
         post_promo_apr: undefined,
         payment_day: undefined,
         minimum_payment: 0,
+        minimum_payment_is_percentage: false,
         planned_payment: undefined,
         notes: '',
       });
@@ -122,6 +128,12 @@ export function DebtFormSheet({ open, onOpenChange, debt }: DebtFormSheetProps) 
   }, [debt, reset, open]);
 
   const onSubmit = async (data: DebtFormData) => {
+    // Calculate minimum payment - if percentage, convert to actual amount
+    let calculatedMinPayment = data.minimum_payment;
+    if (data.minimum_payment_is_percentage && data.balance > 0) {
+      calculatedMinPayment = (data.minimum_payment / 100) * data.balance;
+    }
+
     const payload = {
       name: data.name,
       type: data.type,
@@ -129,7 +141,7 @@ export function DebtFormSheet({ open, onOpenChange, debt }: DebtFormSheetProps) 
       balance: data.balance,
       apr: data.apr,
       is_promo_0: data.is_promo_0,
-      minimum_payment: data.minimum_payment,
+      minimum_payment: calculatedMinPayment,
       lender: data.lender || null,
       promo_start_date: data.promo_start_date || null,
       promo_end_date: data.promo_end_date || null,
@@ -272,13 +284,33 @@ export function DebtFormSheet({ open, onOpenChange, debt }: DebtFormSheetProps) 
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="minimum_payment">Min Payment</Label>
-              <Input
-                id="minimum_payment"
-                type="number"
-                step="0.01"
-                {...register('minimum_payment')}
-              />
+              <div className="flex items-center justify-between">
+                <Label htmlFor="minimum_payment">Min Payment</Label>
+                <button
+                  type="button"
+                  onClick={() => setValue('minimum_payment_is_percentage', !isPercentage)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  {isPercentage ? 'Use £' : 'Use %'}
+                </button>
+              </div>
+              <div className="relative">
+                <Input
+                  id="minimum_payment"
+                  type="number"
+                  step={isPercentage ? "0.1" : "0.01"}
+                  {...register('minimum_payment')}
+                  className="pr-8"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                  {isPercentage ? '%' : '£'}
+                </span>
+              </div>
+              {isPercentage && balance > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  = £{((watch('minimum_payment') / 100) * balance).toFixed(2)}/mo
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="planned_payment">Planned</Label>

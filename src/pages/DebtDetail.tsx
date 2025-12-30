@@ -8,7 +8,8 @@ import { formatDateShort, formatPercentage, getDaysUntil } from '@/lib/format';
 import { DEBT_TYPES } from '@/types/finance';
 import { DebtFormSheet } from '@/components/debts/DebtFormSheet';
 import { PaymentFormSheet } from '@/components/debts/PaymentFormSheet';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { addMonths, format } from 'date-fns';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,7 +54,42 @@ export default function DebtDetail() {
   // Simple payoff estimate
   const monthlyPayment = Number(debt.planned_payment ?? debt.minimum_payment);
   const balance = Number(debt.balance);
+  const apr = debt.is_promo_0 ? 0 : Number(debt.apr);
   const monthsToPayoff = monthlyPayment > 0 ? Math.ceil(balance / monthlyPayment) : null;
+
+  // Generate projected statement (up to 24 months or until paid off)
+  const projectedStatement = useMemo(() => {
+    if (monthlyPayment <= 0 || balance <= 0) return [];
+    
+    const statement: { date: Date; payment: number; interest: number; balance: number }[] = [];
+    let runningBalance = balance;
+    const monthlyRate = apr / 100 / 12;
+    const paymentDay = debt.payment_day || 1;
+    
+    // Start from next month
+    let currentDate = new Date();
+    currentDate.setDate(paymentDay);
+    if (currentDate <= new Date()) {
+      currentDate = addMonths(currentDate, 1);
+    }
+
+    for (let i = 0; i < 24 && runningBalance > 0; i++) {
+      const interest = runningBalance * monthlyRate;
+      const payment = Math.min(monthlyPayment, runningBalance + interest);
+      runningBalance = Math.max(0, runningBalance + interest - payment);
+      
+      statement.push({
+        date: currentDate,
+        payment,
+        interest,
+        balance: runningBalance,
+      });
+      
+      currentDate = addMonths(currentDate, 1);
+    }
+    
+    return statement;
+  }, [balance, monthlyPayment, apr, debt.payment_day]);
 
   return (
     <div className="page-container">
@@ -204,6 +240,44 @@ export default function DebtDetail() {
           </p>
         )}
       </div>
+
+      {/* Projected Statement */}
+      {projectedStatement.length > 0 && (
+        <div className="finance-card mt-4">
+          <h3 className="font-medium mb-3">Projected Statement</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            Based on £{monthlyPayment.toFixed(2)}/mo payment on the {debt.payment_day || 1}th
+          </p>
+          <div className="space-y-1 max-h-64 overflow-y-auto">
+            <div className="grid grid-cols-4 gap-2 text-xs text-muted-foreground font-medium pb-2 border-b border-border sticky top-0 bg-card">
+              <span>Date</span>
+              <span className="text-right">Payment</span>
+              <span className="text-right">Interest</span>
+              <span className="text-right">Balance</span>
+            </div>
+            {projectedStatement.map((row, idx) => (
+              <div
+                key={idx}
+                className="grid grid-cols-4 gap-2 text-xs py-1.5 border-b border-border/50 last:border-0"
+              >
+                <span>{format(row.date, 'd MMM yy')}</span>
+                <span className="text-right text-savings">-£{row.payment.toFixed(2)}</span>
+                <span className="text-right text-muted-foreground">
+                  {row.interest > 0 ? `+£${row.interest.toFixed(2)}` : '—'}
+                </span>
+                <span className="text-right font-medium">
+                  £{row.balance.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+          {projectedStatement.length > 0 && projectedStatement[projectedStatement.length - 1].balance === 0 && (
+            <p className="text-xs text-savings font-medium mt-3 text-center">
+              🎉 Paid off in {projectedStatement.length} months!
+            </p>
+          )}
+        </div>
+      )}
 
       <DebtFormSheet open={showEdit} onOpenChange={setShowEdit} debt={debt} />
       <PaymentFormSheet open={showPayment} onOpenChange={setShowPayment} debtId={debt.id} />

@@ -157,8 +157,11 @@ export default function Debts() {
                   <div className="flex-1">
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-primary rounded-full transition-all duration-300"
-                        style={{ width: `${progress}%` }}
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{ 
+                          width: `${progress}%`,
+                          backgroundColor: `hsl(${Math.round(progress * 1.2)}, 70%, 45%)`
+                        }}
                       />
                     </div>
                     <p className="text-[10px] text-muted-foreground mt-0.5">
