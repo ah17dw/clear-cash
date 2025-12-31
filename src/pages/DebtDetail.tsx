@@ -9,8 +9,8 @@ import { getAdjustedBalance } from '@/lib/debt-utils';
 import { DEBT_TYPES } from '@/types/finance';
 import { DebtFormSheet } from '@/components/debts/DebtFormSheet';
 import { PaymentFormSheet } from '@/components/debts/PaymentFormSheet';
-import { useState, useMemo } from 'react';
-import { addMonths, format } from 'date-fns';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { addMonths, format, isSameMonth, parseISO, startOfMonth } from 'date-fns';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,38 +46,66 @@ export default function DebtDetail() {
   const balance = adjustedBalance;
   const monthlyPayment = rawMonthlyPayment;
 
-  // Generate projected statement (up to 24 months or until paid off)
-  const projectedStatement = useMemo(() => {
-    if (!debt || monthlyPayment <= 0 || balance <= 0) return [];
-    
-    const statement: { date: Date; payment: number; interest: number; balance: number }[] = [];
-    let runningBalance = balance;
-    const monthlyRate = apr / 100 / 12;
-    
-    // Start from next month
-    let currentDate = new Date();
-    currentDate.setDate(paymentDay);
-    if (currentDate <= new Date()) {
-      currentDate = addMonths(currentDate, 1);
-    }
+  // Ref for auto-scrolling to current month
+  const currentMonthRef = useRef<HTMLDivElement>(null);
+  const statementContainerRef = useRef<HTMLDivElement>(null);
 
-    for (let i = 0; i < 24 && runningBalance > 0; i++) {
-      const interest = runningBalance * monthlyRate;
-      const payment = Math.min(monthlyPayment, runningBalance + interest);
-      runningBalance = Math.max(0, runningBalance + interest - payment);
+  // Generate projected statement from promo_start_date using starting_balance and minimum_payment
+  const projectedStatement = useMemo(() => {
+    if (!debt || !debt.promo_start_date) return null; // Return null to indicate missing promo_start_date
+    
+    const payment = Number(debt.minimum_payment);
+    if (payment <= 0) return [];
+    
+    const originalBalance = Number(debt.starting_balance) > 0 ? Number(debt.starting_balance) : Number(debt.balance);
+    if (originalBalance <= 0) return [];
+    
+    const statement: { date: Date; payment: number; balanceAfter: number; isCurrentMonth: boolean }[] = [];
+    let runningBalance = originalBalance;
+    const now = new Date();
+    
+    // Start from promo_start_date
+    let currentDate = startOfMonth(parseISO(debt.promo_start_date));
+
+    // Generate until balance reaches zero (no limit)
+    while (runningBalance > 0) {
+      const actualPayment = Math.min(payment, runningBalance);
+      runningBalance = Math.max(0, runningBalance - actualPayment);
+      const isCurrentMonth = isSameMonth(currentDate, now);
       
       statement.push({
-        date: currentDate,
-        payment,
-        interest,
-        balance: runningBalance,
+        date: new Date(currentDate),
+        payment: actualPayment,
+        balanceAfter: runningBalance,
+        isCurrentMonth,
       });
       
       currentDate = addMonths(currentDate, 1);
     }
     
     return statement;
-  }, [debt, balance, monthlyPayment, apr, paymentDay]);
+  }, [debt]);
+
+  // Calculate payoff info for header
+  const payoffInfo = useMemo(() => {
+    if (!projectedStatement || projectedStatement.length === 0) return null;
+    const payment = Number(debt?.minimum_payment || 0);
+    const promoStart = debt?.promo_start_date ? parseISO(debt.promo_start_date) : null;
+    const payoffDate = projectedStatement[projectedStatement.length - 1]?.date;
+    return { payment, promoStart, payoffDate };
+  }, [projectedStatement, debt]);
+
+  // Auto-scroll to current month on load
+  useEffect(() => {
+    if (currentMonthRef.current && statementContainerRef.current) {
+      const container = statementContainerRef.current;
+      const element = currentMonthRef.current;
+      const containerHeight = container.clientHeight;
+      const elementTop = element.offsetTop - container.offsetTop;
+      const scrollPosition = elementTop - (containerHeight / 2) + (element.clientHeight / 2);
+      container.scrollTop = scrollPosition;
+    }
+  }, [projectedStatement]);
 
   if (isLoading || !debt) {
     return (
@@ -258,42 +286,59 @@ export default function DebtDetail() {
       </div>
 
       {/* Projected Statement */}
-      {projectedStatement.length > 0 && (
-        <div className="finance-card mt-4">
-          <h3 className="font-medium mb-3">Projected Statement</h3>
-          <p className="text-xs text-muted-foreground mb-3">
-            Based on £{monthlyPayment.toFixed(2)}/mo payment on the {debt.payment_day || 1}th
+      <div className="finance-card mt-4">
+        <h3 className="font-medium mb-3">Payment Timeline</h3>
+        {projectedStatement === null ? (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            Add a promo start date to generate the payment timeline.
           </p>
-          <div className="space-y-1 max-h-64 overflow-y-auto">
-            <div className="grid grid-cols-4 gap-2 text-xs text-muted-foreground font-medium pb-2 border-b border-border sticky top-0 bg-card">
-              <span>Date</span>
-              <span className="text-right">Payment</span>
-              <span className="text-right">Interest</span>
-              <span className="text-right">Balance</span>
-            </div>
-            {projectedStatement.map((row, idx) => (
-              <div
-                key={idx}
-                className="grid grid-cols-4 gap-2 text-xs py-1.5 border-b border-border/50 last:border-0"
-              >
-                <span>{format(row.date, 'd MMM yy')}</span>
-                <span className="text-right text-savings">-£{row.payment.toFixed(2)}</span>
-                <span className="text-right text-muted-foreground">
-                  {row.interest > 0 ? `+£${row.interest.toFixed(2)}` : '—'}
-                </span>
-                <span className="text-right font-medium">
-                  £{row.balance.toFixed(2)}
-                </span>
+        ) : projectedStatement.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            No timeline available (check minimum payment is set).
+          </p>
+        ) : (
+          <>
+            {payoffInfo && payoffInfo.promoStart && payoffInfo.payoffDate && (
+              <p className="text-xs text-muted-foreground mb-3">
+                Assuming £{payoffInfo.payment.toFixed(2)}/month from {format(payoffInfo.promoStart, 'MMM yyyy')}, this debt would be paid off by {format(payoffInfo.payoffDate, 'MMM yyyy')}.
+              </p>
+            )}
+            <div ref={statementContainerRef} className="space-y-1 max-h-64 overflow-y-auto">
+              <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground font-medium pb-2 border-b border-border sticky top-0 bg-card">
+                <span>Month</span>
+                <span className="text-right">Payment</span>
+                <span className="text-right">Balance</span>
               </div>
-            ))}
-          </div>
-          {projectedStatement.length > 0 && projectedStatement[projectedStatement.length - 1].balance === 0 && (
-            <p className="text-xs text-savings font-medium mt-3 text-center">
-              🎉 Paid off in {projectedStatement.length} months!
-            </p>
-          )}
-        </div>
-      )}
+              {projectedStatement.map((row, idx) => (
+                <div
+                  key={idx}
+                  ref={row.isCurrentMonth ? currentMonthRef : undefined}
+                  className={`text-xs py-1.5 border-b border-border/50 last:border-0 ${row.isCurrentMonth ? 'bg-muted/50 rounded px-1 -mx-1' : ''}`}
+                >
+                  <div className="grid grid-cols-3 gap-2">
+                    <span className="font-medium">
+                      {format(row.date, 'MMM yyyy')}
+                      {row.isCurrentMonth && <span className="ml-1 text-primary font-bold">THIS MONTH</span>}
+                    </span>
+                    <span className="text-right text-savings">£{row.payment.toFixed(2)}</span>
+                    <span className="text-right font-medium">£{row.balanceAfter.toFixed(2)}</span>
+                  </div>
+                  {row.isCurrentMonth && (
+                    <p className="text-muted-foreground mt-1">
+                      Due this month: £{row.payment.toFixed(2)} • Balance after: £{row.balanceAfter.toFixed(2)}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+            {projectedStatement[projectedStatement.length - 1]?.balanceAfter === 0 && (
+              <p className="text-xs text-savings font-medium mt-3 text-center">
+                🎉 Paid off in {projectedStatement.length} months!
+              </p>
+            )}
+          </>
+        )}
+      </div>
 
       <DebtFormSheet open={showEdit} onOpenChange={setShowEdit} debt={debt} />
       <PaymentFormSheet open={showPayment} onOpenChange={setShowPayment} debtId={debt.id} />
