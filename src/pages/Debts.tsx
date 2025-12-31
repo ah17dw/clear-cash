@@ -162,7 +162,23 @@ export default function Debts() {
               >
                 <div className="flex items-center gap-3">
                   <div className="flex-1 text-left min-w-0">
-                    <p className="font-medium truncate">{debt.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium truncate">{debt.name}</p>
+                      {/* Months remaining pill */}
+                      {(() => {
+                        if (adjustedBalance <= 0) {
+                          return <span className="text-[10px] bg-savings/20 text-savings px-1.5 py-0.5 rounded-full font-medium">Paid off</span>;
+                        }
+                        if (monthlyPayment <= 0) {
+                          return <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">Set payment</span>;
+                        }
+                        const months = Math.ceil(adjustedBalance / monthlyPayment);
+                        if (months > 240) {
+                          return <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">240+ mo</span>;
+                        }
+                        return <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">{months} mo left</span>;
+                      })()}
+                    </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                       {debt.lender && <span className="truncate">{debt.lender}</span>}
                     </div>

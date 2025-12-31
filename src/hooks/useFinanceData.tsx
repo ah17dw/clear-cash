@@ -494,6 +494,49 @@ export function useAlerts(highAprThreshold: number = 20) {
   
   const alerts: Alert[] = [];
   
+  // Calculate total debt payments this month and next 3 months
+  const getMonthlyDebtPayment = (debt: Debt): number => {
+    if (Number(debt.balance) <= 0) return 0;
+    const planned = Number(debt.planned_payment);
+    return planned > 0 ? planned : Number(debt.minimum_payment);
+  };
+  
+  const thisMonthTotal = debts?.reduce((sum, d) => sum + getMonthlyDebtPayment(d), 0) ?? 0;
+  
+  // Add this month's payments alert
+  if (thisMonthTotal > 0) {
+    alerts.push({
+      id: 'monthly-payments',
+      type: 'monthly_payments',
+      title: 'Debt Payments This Month',
+      description: `Total due: £${thisMonthTotal.toFixed(2)}`,
+      severity: 'info',
+    });
+  }
+  
+  // Next 3 months upcoming
+  if (debts && debts.length > 0) {
+    const now = new Date();
+    const upcomingMonths: string[] = [];
+    
+    for (let i = 1; i <= 3; i++) {
+      const futureDate = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const monthName = futureDate.toLocaleDateString('en-GB', { month: 'short' });
+      // Same total for each month (simplified - assumes no payoffs mid-period)
+      upcomingMonths.push(`${monthName}: £${thisMonthTotal.toFixed(0)}`);
+    }
+    
+    if (upcomingMonths.length > 0 && thisMonthTotal > 0) {
+      alerts.push({
+        id: 'upcoming-payments',
+        type: 'upcoming_payments',
+        title: 'Next 3 Months',
+        description: upcomingMonths.join(', '),
+        severity: 'info',
+      });
+    }
+  }
+  
   debts?.forEach((debt) => {
     // 0% promo ending in 90 days
     if (debt.is_promo_0 && debt.promo_end_date) {
