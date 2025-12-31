@@ -113,7 +113,22 @@ export default function Debts() {
             const currentBalance = Number(debt.balance);
             const paidOff = startingBalance - currentBalance;
             const progress = startingBalance > 0 ? Math.min(100, Math.max(0, (paidOff / startingBalance) * 100)) : 0;
-            const monthlyPayment = Number(debt.planned_payment ?? debt.minimum_payment ?? 0);
+            const monthlyPayment = Number(debt.planned_payment) > 0 
+              ? Number(debt.planned_payment) 
+              : Number(debt.minimum_payment) || 0;
+            
+            // Calculate next payment date based on payment_day
+            const getNextPaymentDate = () => {
+              if (!debt.payment_day) return null;
+              const today = new Date();
+              const paymentDay = debt.payment_day;
+              let nextDate = new Date(today.getFullYear(), today.getMonth(), paymentDay);
+              if (nextDate <= today) {
+                nextDate = new Date(today.getFullYear(), today.getMonth() + 1, paymentDay);
+              }
+              return nextDate;
+            };
+            const nextPaymentDate = getNextPaymentDate();
 
             return (
               <button
@@ -152,7 +167,7 @@ export default function Debts() {
                   <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 </div>
 
-                {/* Progress bar and monthly payment */}
+                {/* Progress bar and next payment */}
                 <div className="flex items-center gap-3">
                   <div className="flex-1">
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -169,9 +184,20 @@ export default function Debts() {
                     </p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="text-xs font-medium">
-                      £{monthlyPayment.toFixed(2)}<span className="text-muted-foreground font-normal">/mo</span>
-                    </p>
+                    {monthlyPayment > 0 ? (
+                      <div>
+                        <p className="text-xs font-medium">
+                          £{monthlyPayment.toFixed(2)}
+                        </p>
+                        {nextPaymentDate && (
+                          <p className="text-[10px] text-muted-foreground">
+                            Due {nextPaymentDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">No payment set</p>
+                    )}
                   </div>
                 </div>
               </button>
