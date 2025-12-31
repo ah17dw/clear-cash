@@ -31,40 +31,19 @@ export default function DebtDetail() {
   const [showPayment, setShowPayment] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
-  if (isLoading || !debt) {
-    return (
-      <div className="page-container">
-        <PageHeader title="Loading..." showBack />
-        <div className="animate-pulse space-y-4">
-          <div className="h-24 bg-muted rounded-xl" />
-          <div className="h-48 bg-muted rounded-xl" />
-        </div>
-      </div>
-    );
-  }
-
-  const debtType = DEBT_TYPES.find((t) => t.value === debt.type)?.label || debt.type;
-  const daysUntilPromoEnds = debt.promo_end_date ? getDaysUntil(debt.promo_end_date) : null;
-
-  const handleDelete = async () => {
-    await deleteDebt.mutateAsync(debt.id);
-    navigate('/debts');
-  };
-
-  // Simple payoff estimate
-  const monthlyPayment = Number(debt.planned_payment ?? debt.minimum_payment);
-  const balance = Number(debt.balance);
-  const apr = debt.is_promo_0 ? 0 : Number(debt.apr);
-  const monthsToPayoff = monthlyPayment > 0 ? Math.ceil(balance / monthlyPayment) : null;
+  // Calculate derived values - must be before any early returns to keep hooks consistent
+  const monthlyPayment = debt ? Number(debt.planned_payment ?? debt.minimum_payment) : 0;
+  const balance = debt ? Number(debt.balance) : 0;
+  const apr = debt ? (debt.is_promo_0 ? 0 : Number(debt.apr)) : 0;
+  const paymentDay = debt?.payment_day || 1;
 
   // Generate projected statement (up to 24 months or until paid off)
   const projectedStatement = useMemo(() => {
-    if (monthlyPayment <= 0 || balance <= 0) return [];
+    if (!debt || monthlyPayment <= 0 || balance <= 0) return [];
     
     const statement: { date: Date; payment: number; interest: number; balance: number }[] = [];
     let runningBalance = balance;
     const monthlyRate = apr / 100 / 12;
-    const paymentDay = debt.payment_day || 1;
     
     // Start from next month
     let currentDate = new Date();
@@ -89,7 +68,28 @@ export default function DebtDetail() {
     }
     
     return statement;
-  }, [balance, monthlyPayment, apr, debt.payment_day]);
+  }, [debt, balance, monthlyPayment, apr, paymentDay]);
+
+  if (isLoading || !debt) {
+    return (
+      <div className="page-container">
+        <PageHeader title="Loading..." showBack />
+        <div className="animate-pulse space-y-4">
+          <div className="h-24 bg-muted rounded-xl" />
+          <div className="h-48 bg-muted rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
+  const debtType = DEBT_TYPES.find((t) => t.value === debt.type)?.label || debt.type;
+  const daysUntilPromoEnds = debt.promo_end_date ? getDaysUntil(debt.promo_end_date) : null;
+  const monthsToPayoff = monthlyPayment > 0 ? Math.ceil(balance / monthlyPayment) : null;
+
+  const handleDelete = async () => {
+    await deleteDebt.mutateAsync(debt.id);
+    navigate('/debts');
+  };
 
   return (
     <div className="page-container">
