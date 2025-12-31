@@ -7,6 +7,7 @@ import { useDebts } from '@/hooks/useFinanceData';
 import { getDaysUntil, formatDateShort } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { DebtFormSheet } from '@/components/debts/DebtFormSheet';
+import { getAdjustedBalance } from '@/lib/debt-utils';
 
 type SortOption = 'balance' | 'apr' | 'promo_ending';
 
@@ -30,9 +31,23 @@ export default function Debts() {
     }
   });
 
-  const totalDebt = debts?.reduce((sum, d) => sum + Number(d.balance), 0) ?? 0;
+  // Calculate totals with adjusted balances
+  const calculateAdjustedTotal = () => {
+    return debts?.reduce((sum, d) => {
+      const payment = Number(d.planned_payment) > 0 ? Number(d.planned_payment) : Number(d.minimum_payment) || 0;
+      const { adjustedBalance } = getAdjustedBalance(
+        Number(d.balance),
+        d.payment_day,
+        payment,
+        d.created_at
+      );
+      return sum + adjustedBalance;
+    }, 0) ?? 0;
+  };
+  
+  const totalDebt = calculateAdjustedTotal();
   const totalMinimums = debts?.reduce((sum, d) => sum + Number(d.minimum_payment || 0), 0) ?? 0;
-  const totalPlanned = debts?.reduce((sum, d) => sum + Number(d.planned_payment ?? d.minimum_payment ?? 0), 0) ?? 0;
+  const totalPlanned = debts?.reduce((sum, d) => sum + Number(d.planned_payment) > 0 ? Number(d.planned_payment) : Number(d.minimum_payment) || 0, 0) ?? 0;
 
   return (
     <div className="page-container">
@@ -110,12 +125,20 @@ export default function Debts() {
               ? getDaysUntil(debt.promo_end_date) 
               : null;
             const startingBalance = Number(debt.starting_balance) || Number(debt.balance);
-            const currentBalance = Number(debt.balance);
-            const paidOff = startingBalance - currentBalance;
-            const progress = startingBalance > 0 ? Math.min(100, Math.max(0, (paidOff / startingBalance) * 100)) : 0;
             const monthlyPayment = Number(debt.planned_payment) > 0 
               ? Number(debt.planned_payment) 
               : Number(debt.minimum_payment) || 0;
+            
+            // Calculate adjusted balance (assumes payments made after due date)
+            const { adjustedBalance, paymentsMade } = getAdjustedBalance(
+              Number(debt.balance),
+              debt.payment_day,
+              monthlyPayment,
+              debt.created_at
+            );
+            
+            const paidOff = startingBalance - adjustedBalance;
+            const progress = startingBalance > 0 ? Math.min(100, Math.max(0, (paidOff / startingBalance) * 100)) : 0;
             
             // Calculate next payment date based on payment_day
             const getNextPaymentDate = () => {
@@ -146,7 +169,10 @@ export default function Debts() {
                   </div>
 
                   <div className="text-right flex-shrink-0">
-                    <AmountDisplay amount={currentBalance} size="sm" />
+                    <AmountDisplay amount={adjustedBalance} size="sm" />
+                    {paymentsMade > 0 && (
+                      <p className="text-[10px] text-muted-foreground">Est. after {paymentsMade} payment{paymentsMade > 1 ? 's' : ''}</p>
+                    )}
                     <div className="flex items-center justify-end gap-1.5 mt-0.5">
                       {debt.is_promo_0 ? (
                         <span className="alert-badge alert-badge-info text-[10px] px-1.5 py-0.5">

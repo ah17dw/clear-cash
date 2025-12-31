@@ -5,6 +5,7 @@ import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
 import { useDebt, useDeleteDebt, useDebtPayments } from '@/hooks/useFinanceData';
 import { formatDateShort, formatPercentage, getDaysUntil } from '@/lib/format';
+import { getAdjustedBalance } from '@/lib/debt-utils';
 import { DEBT_TYPES } from '@/types/finance';
 import { DebtFormSheet } from '@/components/debts/DebtFormSheet';
 import { PaymentFormSheet } from '@/components/debts/PaymentFormSheet';
@@ -32,10 +33,18 @@ export default function DebtDetail() {
   const [showDelete, setShowDelete] = useState(false);
 
   // Calculate derived values - must be before any early returns to keep hooks consistent
-  const monthlyPayment = debt ? Number(debt.planned_payment ?? debt.minimum_payment) : 0;
-  const balance = debt ? Number(debt.balance) : 0;
+  const rawMonthlyPayment = debt ? (Number(debt.planned_payment) > 0 ? Number(debt.planned_payment) : Number(debt.minimum_payment)) : 0;
+  const rawBalance = debt ? Number(debt.balance) : 0;
   const apr = debt ? (debt.is_promo_0 ? 0 : Number(debt.apr)) : 0;
   const paymentDay = debt?.payment_day || 1;
+  
+  // Calculate adjusted balance (assumes payments made after due date)
+  const { adjustedBalance, paymentsMade } = debt 
+    ? getAdjustedBalance(rawBalance, debt.payment_day, rawMonthlyPayment, debt.created_at)
+    : { adjustedBalance: 0, paymentsMade: 0 };
+  
+  const balance = adjustedBalance;
+  const monthlyPayment = rawMonthlyPayment;
 
   // Generate projected statement (up to 24 months or until paid off)
   const projectedStatement = useMemo(() => {
@@ -110,8 +119,15 @@ export default function DebtDetail() {
 
       {/* Balance Card */}
       <div className="finance-card finance-card-debt mb-4 text-center">
-        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Balance</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+          {paymentsMade > 0 ? 'Estimated Balance' : 'Current Balance'}
+        </p>
         <AmountDisplay amount={balance} size="lg" className="text-debt" />
+        {paymentsMade > 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            After {paymentsMade} assumed payment{paymentsMade > 1 ? 's' : ''} (DB: {formatCurrency(rawBalance)})
+          </p>
+        )}
         {debt.starting_balance > 0 && (
           <p className="text-xs text-muted-foreground mt-1">
             Started at {formatCurrency(Number(debt.starting_balance))}
