@@ -82,7 +82,7 @@ export interface FinanceSummary {
 
 export interface Alert {
   id: string;
-  type: 'promo_ending' | 'payment_due' | 'high_apr';
+  type: 'promo_ending' | 'payment_due' | 'high_apr' | 'monthly_payments' | 'upcoming_payments';
   title: string;
   description: string;
   severity: 'warning' | 'danger' | 'info';

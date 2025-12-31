@@ -31,6 +31,7 @@ export default function DebtDetail() {
   const [showEdit, setShowEdit] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [paymentMode, setPaymentMode] = useState<'minimum' | 'planned'>('minimum');
 
   // Calculate derived values - must be before any early returns to keep hooks consistent
   const rawMonthlyPayment = debt ? (Number(debt.planned_payment) > 0 ? Number(debt.planned_payment) : Number(debt.minimum_payment)) : 0;
@@ -50,11 +51,21 @@ export default function DebtDetail() {
   const currentMonthRef = useRef<HTMLDivElement>(null);
   const statementContainerRef = useRef<HTMLDivElement>(null);
 
-  // Generate projected statement from promo_start_date using starting_balance and minimum_payment
+  // Get payment amount based on mode
+  const getPaymentForMode = (mode: 'minimum' | 'planned'): number => {
+    if (!debt) return 0;
+    if (mode === 'planned') {
+      const planned = Number(debt.planned_payment);
+      return planned > 0 ? planned : Number(debt.minimum_payment);
+    }
+    return Number(debt.minimum_payment);
+  };
+
+  // Generate projected statement from promo_start_date using starting_balance
   const projectedStatement = useMemo(() => {
     if (!debt || !debt.promo_start_date) return null; // Return null to indicate missing promo_start_date
     
-    const payment = Number(debt.minimum_payment);
+    const payment = getPaymentForMode(paymentMode);
     if (payment <= 0) return [];
     
     const originalBalance = Number(debt.starting_balance) > 0 ? Number(debt.starting_balance) : Number(debt.balance);
@@ -84,28 +95,34 @@ export default function DebtDetail() {
     }
     
     return statement;
-  }, [debt]);
+  }, [debt, paymentMode]);
 
   // Calculate payoff info for header
   const payoffInfo = useMemo(() => {
     if (!projectedStatement || projectedStatement.length === 0) return null;
-    const payment = Number(debt?.minimum_payment || 0);
+    const payment = getPaymentForMode(paymentMode);
     const promoStart = debt?.promo_start_date ? parseISO(debt.promo_start_date) : null;
     const payoffDate = projectedStatement[projectedStatement.length - 1]?.date;
     return { payment, promoStart, payoffDate };
-  }, [projectedStatement, debt]);
+  }, [projectedStatement, debt, paymentMode]);
 
-  // Auto-scroll to current month on load
+  // Auto-scroll to current month on load and when mode changes
+  const scrollToCurrentMonth = () => {
+    setTimeout(() => {
+      if (currentMonthRef.current && statementContainerRef.current) {
+        const container = statementContainerRef.current;
+        const element = currentMonthRef.current;
+        const containerHeight = container.clientHeight;
+        const elementTop = element.offsetTop - container.offsetTop;
+        const scrollPosition = elementTop - (containerHeight / 2) + (element.clientHeight / 2);
+        container.scrollTop = scrollPosition;
+      }
+    }, 50);
+  };
+
   useEffect(() => {
-    if (currentMonthRef.current && statementContainerRef.current) {
-      const container = statementContainerRef.current;
-      const element = currentMonthRef.current;
-      const containerHeight = container.clientHeight;
-      const elementTop = element.offsetTop - container.offsetTop;
-      const scrollPosition = elementTop - (containerHeight / 2) + (element.clientHeight / 2);
-      container.scrollTop = scrollPosition;
-    }
-  }, [projectedStatement]);
+    scrollToCurrentMonth();
+  }, [projectedStatement, paymentMode]);
 
   if (isLoading || !debt) {
     return (
@@ -287,14 +304,45 @@ export default function DebtDetail() {
 
       {/* Projected Statement */}
       <div className="finance-card mt-4">
-        <h3 className="font-medium mb-3">Payment Timeline</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-medium">Payment Timeline</h3>
+          {/* Toggle for Minimum vs Planned */}
+          {debt.promo_start_date && (
+            <div className="flex bg-muted rounded-lg p-0.5 text-xs">
+              <button
+                onClick={() => setPaymentMode('minimum')}
+                className={`px-2 py-1 rounded-md transition-colors ${
+                  paymentMode === 'minimum' 
+                    ? 'bg-background shadow-sm font-medium' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Minimum
+              </button>
+              <button
+                onClick={() => setPaymentMode('planned')}
+                className={`px-2 py-1 rounded-md transition-colors ${
+                  paymentMode === 'planned' 
+                    ? 'bg-background shadow-sm font-medium' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Planned
+              </button>
+            </div>
+          )}
+        </div>
         {projectedStatement === null ? (
           <p className="text-sm text-muted-foreground text-center py-4">
             Add a promo start date to generate the payment timeline.
           </p>
         ) : projectedStatement.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
-            No timeline available (check minimum payment is set).
+            {paymentMode === 'minimum' 
+              ? 'Add a minimum payment to generate timeline.'
+              : Number(debt.planned_payment) <= 0 && Number(debt.minimum_payment) <= 0
+                ? 'Add a minimum or planned payment to generate timeline.'
+                : 'No timeline available (check payment is set).'}
           </p>
         ) : (
           <>

@@ -1,4 +1,4 @@
-import { AlertTriangle, Clock, Percent } from 'lucide-react';
+import { AlertTriangle, Clock, Percent, CreditCard, CalendarDays } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Alert } from '@/types/finance';
 import { cn } from '@/lib/utils';
@@ -11,6 +11,8 @@ const alertIcons = {
   promo_ending: Clock,
   payment_due: AlertTriangle,
   high_apr: Percent,
+  monthly_payments: CreditCard,
+  upcoming_payments: CalendarDays,
 };
 
 export function AlertsList({ alerts }: AlertsListProps) {
