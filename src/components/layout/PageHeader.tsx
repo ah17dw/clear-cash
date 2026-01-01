@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { ArrowLeft, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { UserMenu } from './UserMenu';
 
 interface PageHeaderProps {
   title: string;
@@ -9,6 +10,7 @@ interface PageHeaderProps {
   onAdd?: () => void;
   addLabel?: string;
   rightContent?: ReactNode;
+  showUserMenu?: boolean;
 }
 
 export function PageHeader({ 
@@ -16,7 +18,8 @@ export function PageHeader({
   showBack, 
   onAdd, 
   addLabel = 'Add',
-  rightContent 
+  rightContent,
+  showUserMenu = true
 }: PageHeaderProps) {
   const navigate = useNavigate();
 
@@ -36,14 +39,18 @@ export function PageHeader({
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
       </div>
       
-      {onAdd && (
-        <Button onClick={onAdd} size="sm" className="gap-1.5">
-          <Plus className="h-4 w-4" />
-          {addLabel}
-        </Button>
-      )}
-      
-      {rightContent}
+      <div className="flex items-center gap-2">
+        {onAdd && (
+          <Button onClick={onAdd} size="sm" className="gap-1.5">
+            <Plus className="h-4 w-4" />
+            {addLabel}
+          </Button>
+        )}
+        
+        {rightContent}
+        
+        {showUserMenu && <UserMenu />}
+      </div>
     </header>
   );
 }
