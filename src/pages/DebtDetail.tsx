@@ -61,22 +61,40 @@ export default function DebtDetail() {
     return Number(debt.minimum_payment);
   };
 
-  // Generate projected statement from promo_start_date using starting_balance
+  // Generate projected statement - use promo_start_date or calculate assumed start date
   const projectedStatement = useMemo(() => {
-    if (!debt || !debt.promo_start_date) return null; // Return null to indicate missing promo_start_date
+    if (!debt) return null;
     
     const payment = getPaymentForMode(paymentMode);
-    if (payment <= 0) return [];
+    if (payment <= 0) return { rows: [], isAssumed: false };
     
     const originalBalance = Number(debt.starting_balance) > 0 ? Number(debt.starting_balance) : Number(debt.balance);
-    if (originalBalance <= 0) return [];
+    if (originalBalance <= 0) return { rows: [], isAssumed: false };
     
-    const statement: { date: Date; payment: number; balanceAfter: number; isCurrentMonth: boolean }[] = [];
+    let startDate: Date;
+    let isAssumed = false;
+    
+    if (debt.promo_start_date) {
+      // Use explicit promo start date
+      startDate = startOfMonth(parseISO(debt.promo_start_date));
+    } else {
+      // Calculate assumed start date by working backwards
+      // How many payments would it take to go from starting_balance to current balance?
+      const currentBalance = Number(debt.balance);
+      const paidSoFar = originalBalance - currentBalance;
+      const monthsPaid = paidSoFar > 0 ? Math.ceil(paidSoFar / payment) : 0;
+      
+      // Assume payments started X months ago from today
+      const now = new Date();
+      startDate = startOfMonth(addMonths(now, -monthsPaid));
+      isAssumed = true;
+    }
+    
+    const rows: { date: Date; payment: number; balanceAfter: number; isCurrentMonth: boolean }[] = [];
     let runningBalance = originalBalance;
     const now = new Date();
     
-    // Start from promo_start_date
-    let currentDate = startOfMonth(parseISO(debt.promo_start_date));
+    let currentDate = startDate;
 
     // Generate until balance reaches zero (no limit)
     while (runningBalance > 0) {
@@ -84,7 +102,7 @@ export default function DebtDetail() {
       runningBalance = Math.max(0, runningBalance - actualPayment);
       const isCurrentMonth = isSameMonth(currentDate, now);
       
-      statement.push({
+      rows.push({
         date: new Date(currentDate),
         payment: actualPayment,
         balanceAfter: runningBalance,
@@ -94,17 +112,17 @@ export default function DebtDetail() {
       currentDate = addMonths(currentDate, 1);
     }
     
-    return statement;
+    return { rows, isAssumed };
   }, [debt, paymentMode]);
 
   // Calculate payoff info for header
   const payoffInfo = useMemo(() => {
-    if (!projectedStatement || projectedStatement.length === 0) return null;
+    if (!projectedStatement || projectedStatement.rows.length === 0) return null;
     const payment = getPaymentForMode(paymentMode);
-    const promoStart = debt?.promo_start_date ? parseISO(debt.promo_start_date) : null;
-    const payoffDate = projectedStatement[projectedStatement.length - 1]?.date;
-    return { payment, promoStart, payoffDate };
-  }, [projectedStatement, debt, paymentMode]);
+    const promoStart = projectedStatement.rows[0]?.date;
+    const payoffDate = projectedStatement.rows[projectedStatement.rows.length - 1]?.date;
+    return { payment, promoStart, payoffDate, isAssumed: projectedStatement.isAssumed };
+  }, [projectedStatement, paymentMode]);
 
   // Auto-scroll to current month on load and when mode changes
   const scrollToCurrentMonth = () => {
@@ -307,7 +325,7 @@ export default function DebtDetail() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-medium">Payment Timeline</h3>
           {/* Toggle for Minimum vs Planned */}
-          {debt.promo_start_date && (
+          {projectedStatement && projectedStatement.rows.length > 0 && (
             <div className="flex bg-muted rounded-lg p-0.5 text-xs">
               <button
                 onClick={() => setPaymentMode('minimum')}
@@ -334,9 +352,9 @@ export default function DebtDetail() {
         </div>
         {projectedStatement === null ? (
           <p className="text-sm text-muted-foreground text-center py-4">
-            Add a promo start date to generate the payment timeline.
+            Unable to generate timeline.
           </p>
-        ) : projectedStatement.length === 0 ? (
+        ) : projectedStatement.rows.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
             {paymentMode === 'minimum' 
               ? 'Add a minimum payment to generate timeline.'
@@ -348,7 +366,13 @@ export default function DebtDetail() {
           <>
             {payoffInfo && payoffInfo.promoStart && payoffInfo.payoffDate && (
               <p className="text-xs text-muted-foreground mb-3">
+                {payoffInfo.isAssumed && <span className="text-amber-500 font-medium">(Assumed) </span>}
                 Assuming £{payoffInfo.payment.toFixed(2)}/month from {format(payoffInfo.promoStart, 'MMM yyyy')}, this debt would be paid off by {format(payoffInfo.payoffDate, 'MMM yyyy')}.
+              </p>
+            )}
+            {projectedStatement.isAssumed && (
+              <p className="text-xs text-amber-500/80 mb-2">
+                Start date calculated from balance difference — add a promo start date for accuracy.
               </p>
             )}
             <div ref={statementContainerRef} className="space-y-1 max-h-64 overflow-y-auto">
@@ -357,7 +381,7 @@ export default function DebtDetail() {
                 <span className="text-right">Payment</span>
                 <span className="text-right">Balance</span>
               </div>
-              {projectedStatement.map((row, idx) => (
+              {projectedStatement.rows.map((row, idx) => (
                 <div
                   key={idx}
                   ref={row.isCurrentMonth ? currentMonthRef : undefined}
@@ -379,9 +403,9 @@ export default function DebtDetail() {
                 </div>
               ))}
             </div>
-            {projectedStatement[projectedStatement.length - 1]?.balanceAfter === 0 && (
+            {projectedStatement.rows[projectedStatement.rows.length - 1]?.balanceAfter === 0 && (
               <p className="text-xs text-savings font-medium mt-3 text-center">
-                🎉 Paid off in {projectedStatement.length} months!
+                🎉 Paid off in {projectedStatement.rows.length} months!
               </p>
             )}
           </>
