@@ -1,5 +1,6 @@
-import { User, LogOut, ExternalLink } from 'lucide-react';
+import { User, LogOut, ExternalLink, Settings, ListTodo } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { Link } from 'react-router-dom';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,6 +49,22 @@ export function UserMenu() {
             </p>
           </div>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        
+        <DropdownMenuItem asChild>
+          <Link to="/settings" className="cursor-pointer">
+            <Settings className="h-4 w-4 mr-2" />
+            Settings
+          </Link>
+        </DropdownMenuItem>
+        
+        <DropdownMenuItem asChild>
+          <Link to="/todo" className="cursor-pointer">
+            <ListTodo className="h-4 w-4 mr-2" />
+            To Do
+          </Link>
+        </DropdownMenuItem>
+        
         <DropdownMenuSeparator />
         
         <DropdownMenuLabel className="text-xs text-muted-foreground">

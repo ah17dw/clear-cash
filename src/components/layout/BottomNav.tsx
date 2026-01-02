@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, CreditCard, PiggyBank, ArrowLeftRight, Settings } from 'lucide-react';
+import { Home, CreditCard, PiggyBank, ArrowLeftRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -7,7 +7,6 @@ const navItems = [
   { to: '/debts', icon: CreditCard, label: 'Debts' },
   { to: '/savings', icon: PiggyBank, label: 'Savings' },
   { to: '/cashflow', icon: ArrowLeftRight, label: 'Cashflow' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
 export function BottomNav() {
