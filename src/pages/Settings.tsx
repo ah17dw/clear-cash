@@ -1,16 +1,101 @@
-import { LogOut, Download, Upload } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Download, Phone, Camera, Bell, Upload } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/useAuth';
 import { useDebts, useSavingsAccounts, useIncomeSources, useExpenseItems } from '@/hooks/useFinanceData';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+interface Profile {
+  phone_number: string | null;
+  avatar_url: string | null;
+  email_notifications: boolean;
+}
+
 export default function Settings() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { data: debts } = useDebts();
   const { data: savings } = useSavingsAccounts();
   const { data: income } = useIncomeSources();
   const { data: expenses } = useExpenseItems();
+  
+  const [profile, setProfile] = useState<Profile>({
+    phone_number: null,
+    avatar_url: null,
+    email_notifications: false,
+  });
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    }
+  }, [user]);
+
+  const fetchProfile = async () => {
+    if (!user) return;
+    
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('phone_number, avatar_url, email_notifications')
+      .eq('user_id', user.id)
+      .single();
+    
+    if (data) {
+      setProfile(data);
+    }
+  };
+
+  const updateProfile = async (updates: Partial<Profile>) => {
+    if (!user) return;
+    
+    setLoading(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update(updates)
+      .eq('user_id', user.id);
+    
+    if (error) {
+      toast.error('Failed to update profile');
+    } else {
+      setProfile(prev => ({ ...prev, ...updates }));
+      toast.success('Profile updated');
+    }
+    setLoading(false);
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setUploading(true);
+    
+    const fileExt = file.name.split('.').pop();
+    const filePath = `${user.id}/avatar.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, file, { upsert: true });
+
+    if (uploadError) {
+      toast.error('Failed to upload image');
+      setUploading(false);
+      return;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(filePath);
+
+    await updateProfile({ avatar_url: publicUrl });
+    setUploading(false);
+  };
 
   const handleExport = () => {
     const data = {
@@ -33,31 +118,79 @@ export default function Settings() {
     toast.success('Data exported successfully');
   };
 
-  const handleSignOut = async () => {
-    await signOut();
-    toast.success('Signed out successfully');
+  const getInitials = () => {
+    if (user?.email) {
+      return user.email.charAt(0).toUpperCase();
+    }
+    return 'U';
   };
 
   return (
     <div className="page-container">
       <PageHeader title="Settings" />
 
-      {/* Account */}
+      {/* Profile */}
       <div className="finance-card mb-4">
-        <h3 className="font-medium mb-3">Account</h3>
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs text-muted-foreground">Email</p>
-            <p className="font-medium">{user?.email}</p>
+        <h3 className="font-medium mb-4">Profile</h3>
+        <div className="space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <Avatar className="h-16 w-16">
+                <AvatarImage src={profile.avatar_url || undefined} />
+                <AvatarFallback className="text-lg">{getInitials()}</AvatarFallback>
+              </Avatar>
+              <label className="absolute bottom-0 right-0 p-1 bg-primary text-primary-foreground rounded-full cursor-pointer hover:bg-primary/90 transition-colors">
+                <Camera className="h-3 w-3" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarUpload}
+                  disabled={uploading}
+                />
+              </label>
+            </div>
+            <div className="flex-1">
+              <p className="font-medium">{user?.email}</p>
+              <p className="text-xs text-muted-foreground">Click camera to change photo</p>
+            </div>
           </div>
-          <Button
-            variant="outline"
-            className="w-full gap-2"
-            onClick={handleSignOut}
-          >
-            <LogOut className="h-4 w-4" />
-            Sign Out
-          </Button>
+
+          <div className="space-y-2">
+            <Label htmlFor="phone" className="flex items-center gap-2">
+              <Phone className="h-4 w-4" />
+              Phone Number
+            </Label>
+            <Input
+              id="phone"
+              type="tel"
+              placeholder="+44 7XXX XXXXXX"
+              value={profile.phone_number || ''}
+              onChange={(e) => setProfile(prev => ({ ...prev, phone_number: e.target.value }))}
+              onBlur={() => updateProfile({ phone_number: profile.phone_number })}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Notifications */}
+      <div className="finance-card mb-4">
+        <h3 className="font-medium mb-3">Notifications</h3>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between py-2">
+            <div className="flex items-center gap-2">
+              <Bell className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="font-medium text-sm">Daily Email Digest</p>
+                <p className="text-xs text-muted-foreground">Get updates on debt/income changes</p>
+              </div>
+            </div>
+            <Switch
+              checked={profile.email_notifications}
+              onCheckedChange={(checked) => updateProfile({ email_notifications: checked })}
+              disabled={loading}
+            />
+          </div>
         </div>
       </div>
 

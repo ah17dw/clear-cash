@@ -13,6 +13,7 @@ import Savings from "./pages/Savings";
 import SavingsDetail from "./pages/SavingsDetail";
 import Cashflow from "./pages/Cashflow";
 import Settings from "./pages/Settings";
+import Todo from "./pages/Todo";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -103,6 +104,14 @@ function AppRoutes() {
           element={
             <ProtectedRoute>
               <Settings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/todo"
+          element={
+            <ProtectedRoute>
+              <Todo />
             </ProtectedRoute>
           }
         />
