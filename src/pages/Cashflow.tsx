@@ -1,16 +1,17 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowDownCircle, ArrowUpCircle, Plus, Trash2, Edit2, Users, ArrowUpDown } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { 
   useIncomeSources, 
   useExpenseItems, 
   useDebts,
   useDeleteIncomeSource,
-  useDeleteExpenseItem 
+  useDeleteExpenseItem,
+  useUpdateExpenseItem,
 } from '@/hooks/useFinanceData';
 import { IncomeFormSheet } from '@/components/cashflow/IncomeFormSheet';
 import { ExpenseFormSheet } from '@/components/cashflow/ExpenseFormSheet';
@@ -18,57 +19,40 @@ import { EXPENSE_CATEGORIES, IncomeSource, ExpenseItem } from '@/types/finance';
 
 type SortOption = 'due' | 'value';
 
-// Store per-item couples mode in local state (keyed by expense id)
-type CouplesMap = Record<string, boolean>;
-
 export default function Cashflow() {
+  const navigate = useNavigate();
   const { data: income } = useIncomeSources();
   const { data: expenses } = useExpenseItems();
   const { data: debts } = useDebts();
   
   const deleteIncome = useDeleteIncomeSource();
   const deleteExpense = useDeleteExpenseItem();
+  const updateExpense = useUpdateExpenseItem();
   
   const [showIncomeForm, setShowIncomeForm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [editingIncome, setEditingIncome] = useState<IncomeSource | undefined>();
   const [editingExpense, setEditingExpense] = useState<ExpenseItem | undefined>();
   
-  // Per-item couples mode (default: all ON)
-  const [expenseCouplesMode, setExpenseCouplesMode] = useState<CouplesMap>({});
-  const [debtCouplesMode, setDebtCouplesMode] = useState<CouplesMap>({});
   const [sortBy, setSortBy] = useState<SortOption>('value');
-
-  // Helper to get couples mode for an expense (default true)
-  const getExpenseCouples = (id: string) => expenseCouplesMode[id] ?? true;
-  const getDebtCouples = (id: string) => debtCouplesMode[id] ?? true;
-
-  const toggleExpenseCouples = (id: string) => {
-    setExpenseCouplesMode(prev => ({ ...prev, [id]: !getExpenseCouples(id) }));
-  };
-
-  const toggleDebtCouples = (id: string) => {
-    setDebtCouplesMode(prev => ({ ...prev, [id]: !getDebtCouples(id) }));
-  };
 
   const totalIncome = income?.reduce((sum, i) => sum + Number(i.monthly_amount), 0) ?? 0;
   
-  // Calculate adjusted expenses (per-item)
+  // Calculate adjusted expenses (per-item, persisted per expense)
   const adjustedExpensesTotal = useMemo(() => {
     return expenses?.reduce((sum, e) => {
-      const multiplier = getExpenseCouples(e.id) ? 0.5 : 1;
+      const multiplier = e.couples_mode ? 0.5 : 1;
       return sum + Number(e.monthly_amount) * multiplier;
     }, 0) ?? 0;
-  }, [expenses, expenseCouplesMode]);
+  }, [expenses]);
 
-  // Calculate adjusted debt payments (per-item) - Fix: use || instead of ?? for proper fallback
+  // Debt payments are never 50%
   const adjustedDebtPaymentsTotal = useMemo(() => {
     return debts?.reduce((sum, d) => {
       const payment = Number(d.planned_payment) || Number(d.minimum_payment);
-      const multiplier = getDebtCouples(d.id) ? 0.5 : 1;
-      return sum + payment * multiplier;
+      return sum + payment;
     }, 0) ?? 0;
-  }, [debts, debtCouplesMode]);
+  }, [debts]);
 
   const totalOutgoings = adjustedExpensesTotal + adjustedDebtPaymentsTotal;
   const surplus = totalIncome - totalOutgoings;
@@ -241,7 +225,7 @@ export default function Cashflow() {
           <div className="space-y-2">
             {sortedExpenses.map((expense) => {
               const fullAmount = Number(expense.monthly_amount);
-              const isCouples = getExpenseCouples(expense.id);
+              const isCouples = !!expense.couples_mode;
               const displayAmount = fullAmount * (isCouples ? 0.5 : 1);
               return (
                 <div
@@ -270,7 +254,7 @@ export default function Cashflow() {
                       <Users className="h-3 w-3 text-muted-foreground" />
                       <Switch
                         checked={isCouples}
-                        onCheckedChange={() => toggleExpenseCouples(expense.id)}
+                        onCheckedChange={(checked) => updateExpense.mutate({ id: expense.id, couples_mode: checked })}
                         className="scale-75"
                       />
                     </div>
@@ -319,9 +303,7 @@ export default function Cashflow() {
 
           <div className="space-y-2">
             {sortedDebts.map((debt) => {
-              const fullPayment = Number(debt.planned_payment) || Number(debt.minimum_payment);
-              const isCouples = getDebtCouples(debt.id);
-              const displayPayment = fullPayment * (isCouples ? 0.5 : 1);
+              const payment = Number(debt.planned_payment) || Number(debt.minimum_payment);
               return (
                 <div
                   key={debt.id}
@@ -341,20 +323,7 @@ export default function Cashflow() {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-right">
-                      <AmountDisplay amount={displayPayment} size="sm" />
-                      {isCouples && (
-                        <p className="text-[10px] text-muted-foreground line-through">
-                          £{fullPayment.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Users className="h-3 w-3 text-muted-foreground" />
-                      <Switch
-                        checked={isCouples}
-                        onCheckedChange={() => toggleDebtCouples(debt.id)}
-                        className="scale-75"
-                      />
+                      <AmountDisplay amount={payment} size="sm" />
                     </div>
                   </div>
                 </div>

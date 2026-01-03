@@ -21,10 +21,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useCreateTask, useUpdateTask, useDeleteTask, useAllProfiles, useAddTaskTag, Task } from '@/hooks/useTasks';
+import { Badge } from '@/components/ui/badge';
+import { useCreateTask, useUpdateTask, useDeleteTask, useAddTaskTag, useTaskTags, Task } from '@/hooks/useTasks';
 import { cn } from '@/lib/utils';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useAuth } from '@/hooks/useAuth';
 
 interface TaskFormSheetProps {
   open: boolean;
@@ -33,12 +32,13 @@ interface TaskFormSheetProps {
 }
 
 export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) {
-  const { user } = useAuth();
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
-  const { data: profiles } = useAllProfiles();
   const addTaskTag = useAddTaskTag();
+  const { data: tags } = useTaskTags(task?.id ?? '');
+
+  const [tagEmail, setTagEmail] = useState('');
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -106,13 +106,18 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
     }
   };
 
-  const handleTagUser = async (userId: string) => {
-    if (task) {
-      await addTaskTag.mutateAsync({ taskId: task.id, taggedUserId: userId });
-    }
-  };
+  const handleTagEmail = async () => {
+    if (!task) return;
+    const email = tagEmail.trim();
+    if (!email) return;
 
-  const otherProfiles = profiles?.filter(p => p.user_id !== user?.id) ?? [];
+    // minimal validation
+    const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (!isValid) return;
+
+    await addTaskTag.mutateAsync({ taskId: task.id, taggedEmail: email });
+    setTagEmail('');
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -250,30 +255,37 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
             />
           </div>
 
-          {task && otherProfiles.length > 0 && (
+          {task && (
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <UserPlus className="h-4 w-4" />
-                Tag Users
+                Tag users by email
               </Label>
-              <div className="flex gap-2 flex-wrap">
-                {otherProfiles.map(profile => (
-                  <Button
-                    key={profile.user_id}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleTagUser(profile.user_id)}
-                    className="gap-2"
-                  >
-                    <Avatar className="h-5 w-5">
-                      <AvatarImage src={profile.avatar_url || undefined} />
-                      <AvatarFallback className="text-xs">U</AvatarFallback>
-                    </Avatar>
-                    Tag
-                  </Button>
-                ))}
+
+              <div className="flex gap-2">
+                <Input
+                  value={tagEmail}
+                  onChange={(e) => setTagEmail(e.target.value)}
+                  placeholder="name@domain.com"
+                />
+                <Button type="button" variant="outline" onClick={handleTagEmail}>
+                  Add
+                </Button>
               </div>
+
+              {tags && tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {tags.map((t) => (
+                    <Badge key={t.id} variant="secondary">
+                      {t.tagged_email}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground">
+                Tip: tagging becomes available after you create the task.
+              </p>
             </div>
           )}
 

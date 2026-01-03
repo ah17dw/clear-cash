@@ -12,11 +12,19 @@ export interface Task {
   due_date: string | null;
   due_time: string | null;
   priority: 'low' | 'medium' | 'high';
-  repeat_type: 'daily' | 'weekly' | 'monthly' | null;
+  repeat_type: 'daily' | 'weekly' | 'monthly' | 'none' | null;
   is_completed: boolean;
   auto_complete: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface TaskTag {
+  id: string;
+  task_id: string;
+  tagged_email: string;
+  created_by: string;
+  created_at: string;
 }
 
 export function useTasks() {
@@ -115,32 +123,26 @@ export function useTaskTags(taskId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('task_tags')
-        .select(`
-          id,
-          tagged_user_id,
-          profiles!task_tags_tagged_user_id_fkey (
-            user_id,
-            phone_number,
-            avatar_url
-          )
-        `)
-        .eq('task_id', taskId);
+        .select('*')
+        .eq('task_id', taskId)
+        .order('created_at', { ascending: true });
 
       if (error) throw error;
-      return data;
+      return data as TaskTag[];
     },
     enabled: !!taskId,
   });
 }
 
 export function useAddTaskTag() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ taskId, taggedUserId }: { taskId: string; taggedUserId: string }) => {
+    mutationFn: async ({ taskId, taggedEmail }: { taskId: string; taggedEmail: string }) => {
       const { data, error } = await supabase
         .from('task_tags')
-        .insert({ task_id: taskId, tagged_user_id: taggedUserId })
+        .insert({ task_id: taskId, tagged_email: taggedEmail, created_by: user!.id })
         .select()
         .single();
 
@@ -153,20 +155,6 @@ export function useAddTaskTag() {
     },
     onError: () => {
       toast.error('Failed to tag user');
-    },
-  });
-}
-
-export function useAllProfiles() {
-  return useQuery({
-    queryKey: ['all_profiles'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('user_id, phone_number, avatar_url');
-
-      if (error) throw error;
-      return data;
     },
   });
 }

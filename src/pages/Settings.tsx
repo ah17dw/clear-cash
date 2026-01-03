@@ -27,7 +27,7 @@ export default function Settings() {
   const [profile, setProfile] = useState<Profile>({
     phone_number: null,
     avatar_url: null,
-    email_notifications: false,
+    email_notifications: true,
   });
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -40,33 +40,77 @@ export default function Settings() {
 
   const fetchProfile = async () => {
     if (!user) return;
-    
+
     const { data, error } = await supabase
       .from('profiles')
       .select('phone_number, avatar_url, email_notifications')
       .eq('user_id', user.id)
-      .single();
-    
+      .maybeSingle();
+
+    if (error) {
+      toast.error('Failed to load profile');
+      return;
+    }
+
     if (data) {
       setProfile(data);
+      return;
     }
+
+    // Existing users may not have a profile row yet
+    const { data: created, error: createError } = await supabase
+      .from('profiles')
+      .insert({ user_id: user.id, email_notifications: true })
+      .select('phone_number, avatar_url, email_notifications')
+      .single();
+
+    if (createError) {
+      toast.error('Failed to create profile');
+      return;
+    }
+
+    setProfile(created);
   };
 
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) return;
-    
+
     setLoading(true);
-    const { error } = await supabase
+
+    // Update first; if the row doesn't exist yet, create it.
+    const { data, error } = await supabase
       .from('profiles')
       .update(updates)
-      .eq('user_id', user.id);
-    
+      .eq('user_id', user.id)
+      .select('phone_number, avatar_url, email_notifications')
+      .maybeSingle();
+
     if (error) {
       toast.error('Failed to update profile');
+      setLoading(false);
+      return;
+    }
+
+    if (data) {
+      setProfile(data);
+      toast.success('Profile updated');
+      setLoading(false);
+      return;
+    }
+
+    const { data: created, error: createError } = await supabase
+      .from('profiles')
+      .insert({ user_id: user.id, ...updates })
+      .select('phone_number, avatar_url, email_notifications')
+      .single();
+
+    if (createError) {
+      toast.error('Failed to update profile');
     } else {
-      setProfile(prev => ({ ...prev, ...updates }));
+      setProfile(created);
       toast.success('Profile updated');
     }
+
     setLoading(false);
   };
 
