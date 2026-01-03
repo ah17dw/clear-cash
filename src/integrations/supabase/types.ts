@@ -118,28 +118,46 @@ export type Database = {
       expense_items: {
         Row: {
           category: string | null
+          couples_mode: boolean
           created_at: string
           id: string
           monthly_amount: number
           name: string
+          provider: string | null
+          reminder_days_before: number
+          reminder_email: boolean
+          reminder_sms: boolean
+          renewal_date: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           category?: string | null
+          couples_mode?: boolean
           created_at?: string
           id?: string
           monthly_amount?: number
           name: string
+          provider?: string | null
+          reminder_days_before?: number
+          reminder_email?: boolean
+          reminder_sms?: boolean
+          renewal_date?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           category?: string | null
+          couples_mode?: boolean
           created_at?: string
           id?: string
           monthly_amount?: number
           name?: string
+          provider?: string | null
+          reminder_days_before?: number
+          reminder_email?: boolean
+          reminder_sms?: boolean
+          renewal_date?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -167,6 +185,36 @@ export type Database = {
           id?: string
           monthly_amount?: number
           name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email_notifications: boolean
+          id: string
+          phone_number: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email_notifications?: boolean
+          id?: string
+          phone_number?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email_notifications?: boolean
+          id?: string
+          phone_number?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -248,6 +296,86 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      task_tags: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          tagged_email: string
+          task_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          tagged_email: string
+          task_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          tagged_email?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_tags_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tasks: {
+        Row: {
+          auto_complete: boolean
+          created_at: string
+          description: string | null
+          due_date: string | null
+          due_time: string | null
+          id: string
+          is_completed: boolean
+          priority: string
+          repeat_type: string
+          start_date: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_complete?: boolean
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          due_time?: string | null
+          id?: string
+          is_completed?: boolean
+          priority?: string
+          repeat_type?: string
+          start_date?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_complete?: boolean
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          due_time?: string | null
+          id?: string
+          is_completed?: boolean
+          priority?: string
+          repeat_type?: string
+          start_date?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {

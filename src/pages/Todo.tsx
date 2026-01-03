@@ -79,7 +79,7 @@ export default function Todo() {
     <div className="page-container">
       <PageHeader 
         title="To Do" 
-        action={
+        rightContent={
           <Button size="sm" onClick={() => setShowForm(true)}>
             <Plus className="h-4 w-4 mr-1" />
             Add Task
@@ -141,10 +141,7 @@ export default function Todo() {
               <div className="flex items-start gap-3">
                 <Checkbox
                   checked={task.is_completed}
-                  onCheckedChange={(e) => {
-                    e.stopPropagation?.();
-                    handleToggleComplete(task);
-                  }}
+                  onCheckedChange={() => handleToggleComplete(task)}
                   onClick={(e) => e.stopPropagation()}
                   className="mt-0.5"
                 />

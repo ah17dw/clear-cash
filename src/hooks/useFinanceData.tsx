@@ -469,8 +469,8 @@ export function useFinanceSummary() {
   
   const expensesTotal = expenses?.reduce((sum, e) => sum + Number(e.monthly_amount), 0) ?? 0;
   const debtPayments = debts?.reduce((sum, d) => {
-    const payment = d.planned_payment ?? d.minimum_payment;
-    return sum + Number(payment);
+    const payment = Number(d.planned_payment) || Number(d.minimum_payment);
+    return sum + payment;
   }, 0) ?? 0;
   
   const monthlyOutgoings = expensesTotal + debtPayments;

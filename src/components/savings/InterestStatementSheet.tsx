@@ -43,11 +43,25 @@ export function InterestStatementSheet({ open, onOpenChange, accounts }: Interes
   }
   
   // Calculate totals
-  const totalAnnualInterest = accounts.reduce((sum, a) => 
-    sum + (Number(a.balance) * Number(a.aer)) / 100, 0
+  const totalAnnualInterest = accounts.reduce(
+    (sum, a) => sum + (Number(a.balance) * Number(a.aer)) / 100,
+    0
   );
-  
-  const overAllowance = totalAnnualInterest - UK_TAX_ALLOWANCE_BASIC;
+
+  // Special case: "Etorro ISA" assumed tax-free up to £20k of balance
+  const ISA_TAX_FREE_BALANCE_CAP = 20000;
+  const taxFreeIsaAnnualInterest = accounts.reduce((sum, a) => {
+    const name = (a.name ?? '').toLowerCase();
+    const isEtoroIsa = name.includes('etor') && name.includes('isa');
+    if (!isEtoroIsa) return sum;
+
+    const taxFreeBalance = Math.min(Number(a.balance), ISA_TAX_FREE_BALANCE_CAP);
+    return sum + (taxFreeBalance * Number(a.aer)) / 100;
+  }, 0);
+
+  const taxableAnnualInterest = Math.max(0, totalAnnualInterest - taxFreeIsaAnnualInterest);
+
+  const overAllowance = taxableAnnualInterest - UK_TAX_ALLOWANCE_BASIC;
   const taxableAmount = Math.max(0, overAllowance);
   const estimatedTax = taxableAmount * UK_TAX_RATE;
   
@@ -64,16 +78,28 @@ export function InterestStatementSheet({ open, onOpenChange, accounts }: Interes
         <div className="finance-card mb-4">
           <h3 className="font-medium mb-3">UK Tax Summary (2024/25)</h3>
           
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Estimated Annual Interest</span>
-              <AmountDisplay amount={totalAnnualInterest} size="sm" />
-            </div>
-            
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Personal Savings Allowance</span>
-              <AmountDisplay amount={UK_TAX_ALLOWANCE_BASIC} size="sm" />
-            </div>
+           <div className="space-y-2">
+             <div className="flex justify-between">
+               <span className="text-sm text-muted-foreground">Estimated Annual Interest (gross)</span>
+               <AmountDisplay amount={totalAnnualInterest} size="sm" />
+             </div>
+
+             {taxFreeIsaAnnualInterest > 0 && (
+               <div className="flex justify-between">
+                 <span className="text-sm text-muted-foreground">Tax-free ISA interest (Etoro cap £20k)</span>
+                 <AmountDisplay amount={taxFreeIsaAnnualInterest} size="sm" />
+               </div>
+             )}
+
+             <div className="flex justify-between">
+               <span className="text-sm text-muted-foreground">Taxable Interest (est.)</span>
+               <AmountDisplay amount={taxableAnnualInterest} size="sm" />
+             </div>
+             
+             <div className="flex justify-between">
+               <span className="text-sm text-muted-foreground">Personal Savings Allowance</span>
+               <AmountDisplay amount={UK_TAX_ALLOWANCE_BASIC} size="sm" />
+             </div>
             
             <div className="border-t border-border pt-2">
               {overAllowance <= 0 ? (
@@ -104,9 +130,9 @@ export function InterestStatementSheet({ open, onOpenChange, accounts }: Interes
             </div>
           </div>
           
-          <p className="text-xs text-muted-foreground mt-3">
-            * Based on basic rate taxpayer allowance. Higher rate taxpayers have £500 allowance.
-          </p>
+           <p className="text-xs text-muted-foreground mt-3">
+             * Allowance shown is for basic rate (£1,000). This also assumes your Etorro ISA is tax-free only up to £20k of balance.
+           </p>
         </div>
 
         {/* Monthly Breakdown */}

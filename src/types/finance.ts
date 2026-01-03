@@ -67,6 +67,12 @@ export interface ExpenseItem {
   name: string;
   monthly_amount: number;
   category: string | null;
+  couples_mode?: boolean;
+  renewal_date?: string | null;
+  provider?: string | null;
+  reminder_email?: boolean;
+  reminder_sms?: boolean;
+  reminder_days_before?: number;
   created_at: string;
   updated_at: string;
 }
