@@ -3,6 +3,7 @@ import { ArrowLeft, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { UserMenu } from './UserMenu';
+import { NotificationBell } from './NotificationBell';
 
 interface PageHeaderProps {
   title: string;
@@ -49,7 +50,12 @@ export function PageHeader({
         
         {rightContent}
         
-        {showUserMenu && <UserMenu />}
+        {showUserMenu && (
+          <>
+            <NotificationBell />
+            <UserMenu />
+          </>
+        )}
       </div>
     </header>
   );

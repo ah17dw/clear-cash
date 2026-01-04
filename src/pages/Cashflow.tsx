@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownCircle, ArrowUpCircle, Plus, Trash2, Edit2, Users, ArrowUpDown } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Plus, Trash2, Edit2, Users, ArrowUpDown, ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
@@ -13,8 +13,10 @@ import {
   useDeleteExpenseItem,
   useUpdateExpenseItem,
 } from '@/hooks/useFinanceData';
+import { useAllSubExpenses } from '@/hooks/useSubExpenses';
 import { IncomeFormSheet } from '@/components/cashflow/IncomeFormSheet';
 import { ExpenseFormSheet } from '@/components/cashflow/ExpenseFormSheet';
+import { SubExpenseSheet } from '@/components/cashflow/SubExpenseSheet';
 import { EXPENSE_CATEGORIES, IncomeSource, ExpenseItem } from '@/types/finance';
 
 type SortOption = 'due' | 'value';
@@ -24,6 +26,7 @@ export default function Cashflow() {
   const { data: income } = useIncomeSources();
   const { data: expenses } = useExpenseItems();
   const { data: debts } = useDebts();
+  const { data: allSubExpenses } = useAllSubExpenses();
   
   const deleteIncome = useDeleteIncomeSource();
   const deleteExpense = useDeleteExpenseItem();
@@ -33,6 +36,8 @@ export default function Cashflow() {
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [editingIncome, setEditingIncome] = useState<IncomeSource | undefined>();
   const [editingExpense, setEditingExpense] = useState<ExpenseItem | undefined>();
+  const [showSubExpenseSheet, setShowSubExpenseSheet] = useState(false);
+  const [selectedExpenseForSub, setSelectedExpenseForSub] = useState<ExpenseItem | undefined>();
   
   const [sortBy, setSortBy] = useState<SortOption>('value');
 
@@ -94,6 +99,14 @@ export default function Cashflow() {
 
   const getInitialIcon = (name: string) => {
     return name.charAt(0).toUpperCase();
+  };
+
+  const getSubExpenseCount = (expenseId: string) => {
+    return allSubExpenses?.filter((s) => s.parent_expense_id === expenseId).length ?? 0;
+  };
+
+  const handleDebtClick = (debtId: string) => {
+    navigate(`/debts/${debtId}`);
   };
 
   return (
@@ -227,17 +240,32 @@ export default function Cashflow() {
               const fullAmount = Number(expense.monthly_amount);
               const isCouples = !!expense.couples_mode;
               const displayAmount = fullAmount * (isCouples ? 0.5 : 1);
+              const subCount = getSubExpenseCount(expense.id);
               return (
                 <div
                   key={expense.id}
                   className="flex items-center justify-between py-2 border-b border-border last:border-0"
                 >
-                  <div className="flex items-center gap-3">
+                  <div 
+                    className="flex items-center gap-3 flex-1 cursor-pointer"
+                    onClick={() => {
+                      setSelectedExpenseForSub(expense);
+                      setShowSubExpenseSheet(true);
+                    }}
+                  >
                     <div className="w-8 h-8 rounded-full bg-debt/20 flex items-center justify-center text-debt font-semibold text-sm">
                       {getInitialIcon(expense.name)}
                     </div>
                     <div>
-                      <p className="text-sm">{expense.name}</p>
+                      <p className="text-sm flex items-center gap-1">
+                        {expense.name}
+                        {subCount > 0 && (
+                          <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
+                            {subCount} sub
+                          </span>
+                        )}
+                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                      </p>
                       <p className="text-xs text-muted-foreground">{getCategoryLabel(expense.category)}</p>
                     </div>
                   </div>
@@ -307,14 +335,18 @@ export default function Cashflow() {
               return (
                 <div
                   key={debt.id}
-                  className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                  className="flex items-center justify-between py-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 rounded transition-colors"
+                  onClick={() => handleDebtClick(debt.id)}
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-debt/20 flex items-center justify-center text-debt font-semibold text-sm">
                       {getInitialIcon(debt.name)}
                     </div>
                     <div>
-                      <p className="text-sm">{debt.name}</p>
+                      <p className="text-sm flex items-center gap-1">
+                        {debt.name}
+                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         {debt.planned_payment ? 'Planned' : 'Minimum'}
                         {debt.payment_day && ` · Day ${debt.payment_day}`}
@@ -347,6 +379,13 @@ export default function Cashflow() {
         onOpenChange={setShowExpenseForm}
         expense={editingExpense}
       />
+      {selectedExpenseForSub && (
+        <SubExpenseSheet
+          open={showSubExpenseSheet}
+          onOpenChange={setShowSubExpenseSheet}
+          expense={selectedExpenseForSub}
+        />
+      )}
     </div>
   );
 }
