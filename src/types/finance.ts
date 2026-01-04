@@ -77,6 +77,38 @@ export interface ExpenseItem {
   updated_at: string;
 }
 
+export interface SubExpense {
+  id: string;
+  parent_expense_id: string;
+  user_id: string;
+  name: string;
+  monthly_amount: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'error';
+  is_read: boolean;
+  link: string | null;
+  created_at: string;
+}
+
+export interface UserProfile {
+  id: string;
+  user_id: string;
+  display_name: string | null;
+  phone_number: string | null;
+  avatar_url: string | null;
+  email_notifications: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface FinanceSummary {
   totalDebts: number;
   totalSavings: number;

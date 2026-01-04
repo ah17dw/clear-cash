@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon, Trash2, UserPlus } from 'lucide-react';
+import { Calendar as CalendarIcon, Trash2, UserPlus, Search } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -23,7 +23,9 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useCreateTask, useUpdateTask, useDeleteTask, useAddTaskTag, useTaskTags, Task } from '@/hooks/useTasks';
+import { useSearchProfiles } from '@/hooks/useProfiles';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface TaskFormSheetProps {
   open: boolean;
@@ -38,7 +40,8 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
   const addTaskTag = useAddTaskTag();
   const { data: tags } = useTaskTags(task?.id ?? '');
 
-  const [tagEmail, setTagEmail] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+  const { data: searchResults, isLoading: isSearching } = useSearchProfiles(userSearch);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -73,6 +76,7 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
     setPriority('medium');
     setRepeatType('none');
     setAutoComplete(false);
+    setUserSearch('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -90,13 +94,16 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
       auto_complete: autoComplete,
     };
 
-    if (task) {
-      await updateTask.mutateAsync({ id: task.id, updates: taskData });
-    } else {
-      await createTask.mutateAsync(taskData);
+    try {
+      if (task) {
+        await updateTask.mutateAsync({ id: task.id, updates: taskData });
+      } else {
+        await createTask.mutateAsync(taskData);
+      }
+      onOpenChange(false);
+    } catch (error) {
+      // Error handled by mutation
     }
-
-    onOpenChange(false);
   };
 
   const handleDelete = async () => {
@@ -106,17 +113,39 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
     }
   };
 
-  const handleTagEmail = async () => {
-    if (!task) return;
-    const email = tagEmail.trim();
+  const handleSelectUser = async (profile: { user_id: string; display_name: string | null }) => {
+    if (!task) {
+      toast.info('Save the task first, then you can tag users');
+      return;
+    }
+    
+    // We need to get the email for this user - for now we'll use display_name as a placeholder
+    // In a real app, we'd query the email or store it in profiles
+    // For now, we'll ask for email input but show the display_name in search
+    const email = prompt(`Enter email for ${profile.display_name || 'this user'}:`);
     if (!email) return;
 
-    // minimal validation
+    await addTaskTag.mutateAsync({ taskId: task.id, taggedEmail: email });
+    setUserSearch('');
+  };
+
+  const handleTagByEmail = async () => {
+    if (!task) {
+      toast.info('Save the task first, then you can tag users');
+      return;
+    }
+
+    const email = userSearch.trim();
+    if (!email) return;
+
     const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    if (!isValid) return;
+    if (!isValid) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
 
     await addTaskTag.mutateAsync({ taskId: task.id, taggedEmail: email });
-    setTagEmail('');
+    setUserSearch('');
   };
 
   return (
@@ -255,39 +284,78 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
             />
           </div>
 
-          {task && (
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <UserPlus className="h-4 w-4" />
-                Tag users by email
-              </Label>
+          {/* User Tagging Section */}
+          <div className="space-y-2 border-t pt-4">
+            <Label className="flex items-center gap-2">
+              <UserPlus className="h-4 w-4" />
+              Delegate to User
+            </Label>
 
-              <div className="flex gap-2">
-                <Input
-                  value={tagEmail}
-                  onChange={(e) => setTagEmail(e.target.value)}
-                  placeholder="name@domain.com"
-                />
-                <Button type="button" variant="outline" onClick={handleTagEmail}>
-                  Add
-                </Button>
-              </div>
-
-              {tags && tags.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {tags.map((t) => (
-                    <Badge key={t.id} variant="secondary">
-                      {t.tagged_email}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-
-              <p className="text-xs text-muted-foreground">
-                Tip: tagging becomes available after you create the task.
-              </p>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                placeholder="Search by name or enter email..."
+                className="pl-9"
+              />
             </div>
-          )}
+
+            {/* Search Results */}
+            {userSearch.length >= 2 && (
+              <div className="border rounded-md divide-y max-h-32 overflow-y-auto">
+                {isSearching ? (
+                  <p className="text-xs text-muted-foreground p-2">Searching...</p>
+                ) : searchResults && searchResults.length > 0 ? (
+                  searchResults.map((profile) => (
+                    <button
+                      key={profile.user_id}
+                      type="button"
+                      className="w-full text-left p-2 hover:bg-muted text-sm flex items-center gap-2"
+                      onClick={() => handleSelectUser(profile)}
+                    >
+                      <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium">
+                        {(profile.display_name || '?').charAt(0).toUpperCase()}
+                      </div>
+                      {profile.display_name || 'Unknown User'}
+                    </button>
+                  ))
+                ) : (
+                  <div className="p-2">
+                    <p className="text-xs text-muted-foreground mb-2">No users found. Tag by email?</p>
+                    {/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userSearch) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleTagByEmail}
+                        className="w-full"
+                      >
+                        Tag {userSearch}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Existing Tags */}
+            {tags && tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {tags.map((t) => (
+                  <Badge key={t.id} variant="secondary">
+                    {t.tagged_email}
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            {!task && (
+              <p className="text-xs text-muted-foreground">
+                Save the task first to tag users.
+              </p>
+            )}
+          </div>
 
           <div className="flex gap-2 pt-4">
             {task && (
@@ -301,7 +369,7 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
                 Delete
               </Button>
             )}
-            <Button type="submit" className="flex-1">
+            <Button type="submit" className="flex-1" disabled={createTask.isPending || updateTask.isPending}>
               {task ? 'Save Changes' : 'Create Task'}
             </Button>
           </div>

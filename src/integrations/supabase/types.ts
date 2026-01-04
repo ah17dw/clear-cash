@@ -190,10 +190,44 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          link: string | null
+          message: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link?: string | null
+          message: string
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link?: string | null
+          message?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           created_at: string
+          display_name: string | null
           email_notifications: boolean
           id: string
           phone_number: string | null
@@ -203,6 +237,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          display_name?: string | null
           email_notifications?: boolean
           id?: string
           phone_number?: string | null
@@ -212,6 +247,7 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          display_name?: string | null
           email_notifications?: boolean
           id?: string
           phone_number?: string | null
@@ -293,6 +329,44 @@ export type Database = {
             columns: ["savings_account_id"]
             isOneToOne: false
             referencedRelation: "savings_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sub_expenses: {
+        Row: {
+          created_at: string
+          id: string
+          monthly_amount: number
+          name: string
+          parent_expense_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          monthly_amount?: number
+          name: string
+          parent_expense_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          monthly_amount?: number
+          name?: string
+          parent_expense_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sub_expenses_parent_expense_id_fkey"
+            columns: ["parent_expense_id"]
+            isOneToOne: false
+            referencedRelation: "expense_items"
             referencedColumns: ["id"]
           },
         ]
