@@ -54,17 +54,50 @@ export function useCreateSubExpense() {
         .single();
 
       if (error) throw error;
+      
+      // Update parent expense total
+      await updateParentTotal(subExpense.parent_expense_id);
+      
       return data;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['subExpenses', variables.parent_expense_id] });
       queryClient.invalidateQueries({ queryKey: ['allSubExpenses'] });
+      queryClient.invalidateQueries({ queryKey: ['expenseItems'] });
       toast.success('Sub-expense added');
     },
     onError: () => {
       toast.error('Failed to add sub-expense');
     },
   });
+}
+
+async function updateParentTotal(parentExpenseId: string) {
+  // Get all sub-expenses for this parent
+  const { data: subExpenses, error: fetchError } = await supabase
+    .from('sub_expenses')
+    .select('monthly_amount')
+    .eq('parent_expense_id', parentExpenseId);
+  
+  if (fetchError) {
+    console.error('Error fetching sub-expenses:', fetchError);
+    return;
+  }
+  
+  // Calculate total
+  const total = subExpenses?.reduce((sum, s) => sum + Number(s.monthly_amount), 0) ?? 0;
+  
+  // Only update parent if there are sub-expenses
+  if (subExpenses && subExpenses.length > 0) {
+    const { error: updateError } = await supabase
+      .from('expense_items')
+      .update({ monthly_amount: total })
+      .eq('id', parentExpenseId);
+    
+    if (updateError) {
+      console.error('Error updating parent expense:', updateError);
+    }
+  }
 }
 
 export function useUpdateSubExpense() {
@@ -80,11 +113,16 @@ export function useUpdateSubExpense() {
         .single();
 
       if (error) throw error;
+      
+      // Update parent expense total
+      await updateParentTotal(parent_expense_id);
+      
       return data;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['subExpenses', variables.parent_expense_id] });
       queryClient.invalidateQueries({ queryKey: ['allSubExpenses'] });
+      queryClient.invalidateQueries({ queryKey: ['expenseItems'] });
       toast.success('Sub-expense updated');
     },
     onError: () => {
@@ -104,10 +142,14 @@ export function useDeleteSubExpense() {
         .eq('id', id);
 
       if (error) throw error;
+      
+      // Update parent expense total
+      await updateParentTotal(parent_expense_id);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['subExpenses', variables.parent_expense_id] });
       queryClient.invalidateQueries({ queryKey: ['allSubExpenses'] });
+      queryClient.invalidateQueries({ queryKey: ['expenseItems'] });
       toast.success('Sub-expense deleted');
     },
     onError: () => {
