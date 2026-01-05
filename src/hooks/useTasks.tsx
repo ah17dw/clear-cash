@@ -12,9 +12,11 @@ export interface Task {
   due_date: string | null;
   due_time: string | null;
   priority: 'low' | 'medium' | 'high';
-  repeat_type: 'daily' | 'weekly' | 'monthly' | 'none' | null;
+  repeat_type: 'daily' | 'weekly' | 'monthly' | 'none';
   is_completed: boolean;
   auto_complete: boolean;
+  delegation_status: 'none' | 'pending' | 'accepted' | 'rejected';
+  completed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -52,9 +54,16 @@ export function useCreateTask() {
 
   return useMutation({
     mutationFn: async (task: Omit<Task, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+      // Ensure repeat_type is never null - DB expects string with default 'none'
+      const taskData = {
+        ...task,
+        user_id: user!.id,
+        repeat_type: task.repeat_type || 'none',
+      };
+      
       const { data, error } = await supabase
         .from('tasks')
-        .insert({ ...task, user_id: user!.id })
+        .insert(taskData)
         .select()
         .single();
 
@@ -65,7 +74,8 @@ export function useCreateTask() {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       toast.success('Task created');
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('Task creation error:', error);
       toast.error('Failed to create task');
     },
   });

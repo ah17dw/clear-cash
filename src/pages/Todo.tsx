@@ -1,20 +1,24 @@
 import { useState } from 'react';
-import { Plus, Calendar, Clock, Flag, Repeat, Users, CheckCircle2, Circle, Filter } from 'lucide-react';
-import { format, isToday, isThisWeek, isThisMonth, parseISO } from 'date-fns';
+import { Plus, Calendar, Clock, Flag, Repeat, CheckCircle2, History, AlertTriangle } from 'lucide-react';
+import { format, isToday, isThisWeek, isThisMonth, parseISO, isPast, differenceInDays } from 'date-fns';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from '@/hooks/useTasks';
+import { useTasks, useUpdateTask } from '@/hooks/useTasks';
+import { useAddTaskHistory } from '@/hooks/useTaskHistory';
 import { TaskFormSheet } from '@/components/todo/TaskFormSheet';
+import { TaskHistorySheet } from '@/components/todo/TaskHistorySheet';
 import { cn } from '@/lib/utils';
 
 export default function Todo() {
   const { data: tasks, isLoading } = useTasks();
   const [showForm, setShowForm] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [editingTask, setEditingTask] = useState<any>(null);
   const [filter, setFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const updateTask = useUpdateTask();
+  const addHistory = useAddTaskHistory();
 
   const filteredTasks = tasks?.filter(task => {
     if (filter === 'all') return true;
@@ -34,10 +38,24 @@ export default function Todo() {
   const monthlyCount = tasks?.filter(t => t.repeat_type === 'monthly' && !t.is_completed).length ?? 0;
 
   const handleToggleComplete = async (task: any) => {
+    const isCompleting = !task.is_completed;
+    const isOnTime = task.due_date ? !isPast(parseISO(task.due_date)) : true;
+
     await updateTask.mutateAsync({
       id: task.id,
-      updates: { is_completed: !task.is_completed }
+      updates: { 
+        is_completed: isCompleting,
+        completed_at: isCompleting ? new Date().toISOString() : null,
+      }
     });
+
+    if (isCompleting) {
+      await addHistory.mutateAsync({
+        task_id: task.id,
+        action: 'completed',
+        details: { on_time: isOnTime },
+      });
+    }
   };
 
   const getPriorityColor = (priority: string) => {
@@ -49,8 +67,54 @@ export default function Todo() {
     }
   };
 
+  const getTaskStatus = (task: any) => {
+    if (task.is_completed) return 'completed';
+    if (!task.due_date) return 'normal';
+    
+    const dueDate = parseISO(task.due_date);
+    const daysUntil = differenceInDays(dueDate, new Date());
+    
+    if (isPast(dueDate) && !isToday(dueDate)) return 'overdue';
+    if (daysUntil <= 2) return 'upcoming';
+    return 'normal';
+  };
+
+  const getStatusBadge = (task: any) => {
+    const status = getTaskStatus(task);
+    switch (status) {
+      case 'overdue':
+        return (
+          <Badge variant="destructive" className="text-xs">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            Overdue
+          </Badge>
+        );
+      case 'upcoming':
+        return (
+          <Badge variant="outline" className="text-xs border-amber-500 text-amber-500">
+            <Clock className="h-3 w-3 mr-1" />
+            Due soon
+          </Badge>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const getTaskCardClass = (task: any) => {
+    const status = getTaskStatus(task);
+    switch (status) {
+      case 'overdue':
+        return 'border-l-4 border-l-debt bg-debt/5';
+      case 'upcoming':
+        return 'border-l-4 border-l-amber-500 bg-amber-500/5';
+      default:
+        return '';
+    }
+  };
+
   const getRepeatBadge = (repeatType: string | null) => {
-    if (!repeatType) return null;
+    if (!repeatType || repeatType === 'none') return null;
     const labels: Record<string, string> = {
       daily: 'Daily',
       weekly: 'Weekly',
@@ -80,10 +144,15 @@ export default function Todo() {
       <PageHeader 
         title="To Do" 
         rightContent={
-          <Button size="sm" onClick={() => setShowForm(true)}>
-            <Plus className="h-4 w-4 mr-1" />
-            Add Task
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="icon" variant="outline" onClick={() => setShowHistory(true)}>
+              <History className="h-4 w-4" />
+            </Button>
+            <Button size="sm" onClick={() => setShowForm(true)}>
+              <Plus className="h-4 w-4 mr-1" />
+              Add
+            </Button>
+          </div>
         }
       />
 
@@ -132,7 +201,10 @@ export default function Todo() {
           {incompleteTasks.map(task => (
             <div
               key={task.id}
-              className="finance-card p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+              className={cn(
+                "finance-card p-3 cursor-pointer hover:bg-muted/50 transition-colors",
+                getTaskCardClass(task)
+              )}
               onClick={() => {
                 setEditingTask(task);
                 setShowForm(true);
@@ -146,16 +218,20 @@ export default function Todo() {
                   className="mt-0.5"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Flag className={cn("h-3 w-3", getPriorityColor(task.priority))} />
                     <p className="font-medium truncate">{task.title}</p>
+                    {getStatusBadge(task)}
                   </div>
                   {task.description && (
                     <p className="text-sm text-muted-foreground truncate mt-1">{task.description}</p>
                   )}
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     {task.due_date && (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <span className={cn(
+                        "text-xs flex items-center gap-1",
+                        getTaskStatus(task) === 'overdue' ? 'text-debt font-medium' : 'text-muted-foreground'
+                      )}>
                         <Calendar className="h-3 w-3" />
                         {format(parseISO(task.due_date), 'MMM d')}
                       </span>
@@ -211,6 +287,11 @@ export default function Todo() {
           if (!open) setEditingTask(null);
         }}
         task={editingTask}
+      />
+
+      <TaskHistorySheet
+        open={showHistory}
+        onOpenChange={setShowHistory}
       />
     </div>
   );

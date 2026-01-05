@@ -371,6 +371,41 @@ export type Database = {
           },
         ]
       }
+      task_history: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          id: string
+          task_id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          task_id: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          task_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_history_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_tags: {
         Row: {
           created_at: string
@@ -406,7 +441,9 @@ export type Database = {
       tasks: {
         Row: {
           auto_complete: boolean
+          completed_at: string | null
           created_at: string
+          delegation_status: string | null
           description: string | null
           due_date: string | null
           due_time: string | null
@@ -421,7 +458,9 @@ export type Database = {
         }
         Insert: {
           auto_complete?: boolean
+          completed_at?: string | null
           created_at?: string
+          delegation_status?: string | null
           description?: string | null
           due_date?: string | null
           due_time?: string | null
@@ -436,7 +475,9 @@ export type Database = {
         }
         Update: {
           auto_complete?: boolean
+          completed_at?: string | null
           created_at?: string
+          delegation_status?: string | null
           description?: string | null
           due_date?: string | null
           due_time?: string | null

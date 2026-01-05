@@ -89,9 +89,11 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
       due_date: dueDate ? format(dueDate, 'yyyy-MM-dd') : null,
       due_time: dueTime || null,
       priority,
-      repeat_type: repeatType === 'none' ? null : repeatType as 'daily' | 'weekly' | 'monthly',
+      repeat_type: repeatType as 'daily' | 'weekly' | 'monthly' | 'none',
       is_completed: task?.is_completed ?? false,
       auto_complete: autoComplete,
+      delegation_status: task?.delegation_status ?? 'none' as const,
+      completed_at: task?.completed_at ?? null,
     };
 
     try {
