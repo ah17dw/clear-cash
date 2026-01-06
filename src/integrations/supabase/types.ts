@@ -120,6 +120,7 @@ export type Database = {
           category: string | null
           couples_mode: boolean
           created_at: string
+          end_date: string | null
           id: string
           monthly_amount: number
           name: string
@@ -128,6 +129,7 @@ export type Database = {
           reminder_email: boolean
           reminder_sms: boolean
           renewal_date: string | null
+          start_date: string | null
           updated_at: string
           user_id: string
         }
@@ -135,6 +137,7 @@ export type Database = {
           category?: string | null
           couples_mode?: boolean
           created_at?: string
+          end_date?: string | null
           id?: string
           monthly_amount?: number
           name: string
@@ -143,6 +146,7 @@ export type Database = {
           reminder_email?: boolean
           reminder_sms?: boolean
           renewal_date?: string | null
+          start_date?: string | null
           updated_at?: string
           user_id: string
         }
@@ -150,6 +154,7 @@ export type Database = {
           category?: string | null
           couples_mode?: boolean
           created_at?: string
+          end_date?: string | null
           id?: string
           monthly_amount?: number
           name?: string
@@ -158,6 +163,7 @@ export type Database = {
           reminder_email?: boolean
           reminder_sms?: boolean
           renewal_date?: string | null
+          start_date?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -166,25 +172,31 @@ export type Database = {
       income_sources: {
         Row: {
           created_at: string
+          end_date: string | null
           id: string
           monthly_amount: number
           name: string
+          start_date: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
+          end_date?: string | null
           id?: string
           monthly_amount?: number
           name: string
+          start_date?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
+          end_date?: string | null
           id?: string
           monthly_amount?: number
           name?: string
+          start_date?: string | null
           updated_at?: string
           user_id?: string
         }
