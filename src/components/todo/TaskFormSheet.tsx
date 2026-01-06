@@ -82,17 +82,23 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const normalizedDueTime = dueTime
+      ? /^\d{2}:\d{2}$/.test(dueTime)
+        ? `${dueTime}:00`
+        : dueTime
+      : null;
+
     const taskData = {
-      title,
-      description: description || null,
+      title: title.trim(),
+      description: description.trim() ? description.trim() : null,
       start_date: startDate ? format(startDate, 'yyyy-MM-dd') : null,
       due_date: dueDate ? format(dueDate, 'yyyy-MM-dd') : null,
-      due_time: dueTime || null,
+      due_time: normalizedDueTime,
       priority,
       repeat_type: repeatType as 'daily' | 'weekly' | 'monthly' | 'none',
       is_completed: task?.is_completed ?? false,
       auto_complete: autoComplete,
-      delegation_status: task?.delegation_status ?? 'none' as const,
+      delegation_status: (task?.delegation_status ?? 'none') as Task['delegation_status'],
       completed_at: task?.completed_at ?? null,
     };
 
@@ -104,7 +110,9 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
       }
       onOpenChange(false);
     } catch (error) {
-      // Error handled by mutation
+      const message = error instanceof Error ? error.message : 'Failed to save task';
+      console.error('Task form submit error:', error);
+      toast.error(message);
     }
   };
 

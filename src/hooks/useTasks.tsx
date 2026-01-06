@@ -54,13 +54,15 @@ export function useCreateTask() {
 
   return useMutation({
     mutationFn: async (task: Omit<Task, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+      if (!user?.id) throw new Error('You must be signed in to create tasks');
+
       // Ensure repeat_type is never null - DB expects string with default 'none'
       const taskData = {
         ...task,
-        user_id: user!.id,
+        user_id: user.id,
         repeat_type: task.repeat_type || 'none',
       };
-      
+
       const { data, error } = await supabase
         .from('tasks')
         .insert(taskData)
@@ -75,8 +77,9 @@ export function useCreateTask() {
       toast.success('Task created');
     },
     onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Failed to create task';
       console.error('Task creation error:', error);
-      toast.error('Failed to create task');
+      toast.error(message);
     },
   });
 }
