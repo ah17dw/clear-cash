@@ -268,6 +268,71 @@ export type Database = {
         }
         Relationships: []
       }
+      renewals: {
+        Row: {
+          added_to_expenses: boolean
+          agreement_end: string | null
+          agreement_start: string | null
+          created_at: string
+          file_name: string | null
+          file_url: string | null
+          id: string
+          is_monthly_payment: boolean
+          linked_expense_id: string | null
+          monthly_amount: number
+          name: string
+          notes: string | null
+          provider: string | null
+          total_cost: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          added_to_expenses?: boolean
+          agreement_end?: string | null
+          agreement_start?: string | null
+          created_at?: string
+          file_name?: string | null
+          file_url?: string | null
+          id?: string
+          is_monthly_payment?: boolean
+          linked_expense_id?: string | null
+          monthly_amount?: number
+          name: string
+          notes?: string | null
+          provider?: string | null
+          total_cost?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          added_to_expenses?: boolean
+          agreement_end?: string | null
+          agreement_start?: string | null
+          created_at?: string
+          file_name?: string | null
+          file_url?: string | null
+          id?: string
+          is_monthly_payment?: boolean
+          linked_expense_id?: string | null
+          monthly_amount?: number
+          name?: string
+          notes?: string | null
+          provider?: string | null
+          total_cost?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "renewals_linked_expense_id_fkey"
+            columns: ["linked_expense_id"]
+            isOneToOne: false
+            referencedRelation: "expense_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       savings_accounts: {
         Row: {
           aer: number
