@@ -7,10 +7,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Upload, Sparkles, Loader2 } from 'lucide-react';
-import { format, parse } from 'date-fns';
+import { CalendarIcon, Upload, Sparkles, Loader2, FileText, Trash2, ExternalLink } from 'lucide-react';
+import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { useCreateRenewal, useUpdateRenewal, useExtractContract, Renewal } from '@/hooks/useRenewals';
+import { useCreateRenewal, useUpdateRenewal, useExtractContract, useRenewalFiles, useAddRenewalFile, useDeleteRenewalFile, Renewal } from '@/hooks/useRenewals';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -26,6 +26,9 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
   const createRenewal = useCreateRenewal();
   const updateRenewal = useUpdateRenewal();
   const extractContract = useExtractContract();
+  const { data: existingFiles } = useRenewalFiles(renewal?.id ?? '');
+  const addRenewalFile = useAddRenewalFile();
+  const deleteRenewalFile = useDeleteRenewalFile();
 
   const [name, setName] = useState('');
   const [provider, setProvider] = useState('');
@@ -35,11 +38,11 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
   const [agreementStart, setAgreementStart] = useState<Date | undefined>();
   const [agreementEnd, setAgreementEnd] = useState<Date | undefined>();
   const [notes, setNotes] = useState('');
-  const [fileUrl, setFileUrl] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [personOrAddress, setPersonOrAddress] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedText, setExtractedText] = useState('');
+  const [pendingFiles, setPendingFiles] = useState<{ url: string; name: string; size: number }[]>([]);
 
   useEffect(() => {
     if (renewal) {
@@ -51,8 +54,8 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
       setAgreementStart(renewal.agreement_start ? new Date(renewal.agreement_start) : undefined);
       setAgreementEnd(renewal.agreement_end ? new Date(renewal.agreement_end) : undefined);
       setNotes(renewal.notes || '');
-      setFileUrl(renewal.file_url);
-      setFileName(renewal.file_name);
+      setPersonOrAddress(renewal.person_or_address || '');
+      setPendingFiles([]);
     } else {
       resetForm();
     }
@@ -67,9 +70,9 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
     setAgreementStart(undefined);
     setAgreementEnd(undefined);
     setNotes('');
-    setFileUrl(null);
-    setFileName(null);
+    setPersonOrAddress('');
     setExtractedText('');
+    setPendingFiles([]);
   };
 
   // Auto-calculate monthly amount when total cost changes and not monthly payment
@@ -83,42 +86,62 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
   }, [totalCost, isMonthlyPayment]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
+    const files = e.target.files;
+    if (!files || files.length === 0 || !user) return;
 
     setIsUploading(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const filePath = `${user.id}/${Date.now()}.${fileExt}`;
+      for (const file of Array.from(files)) {
+        const fileExt = file.name.split('.').pop();
+        const filePath = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('renewal-files')
-        .upload(filePath, file);
+        const { error: uploadError } = await supabase.storage
+          .from('renewal-files')
+          .upload(filePath, file);
 
-      if (uploadError) throw uploadError;
+        if (uploadError) throw uploadError;
 
-      const { data: urlData } = supabase.storage
-        .from('renewal-files')
-        .getPublicUrl(filePath);
+        const { data: urlData } = supabase.storage
+          .from('renewal-files')
+          .getPublicUrl(filePath);
 
-      setFileUrl(urlData.publicUrl);
-      setFileName(file.name);
+        // If editing existing renewal, add file directly to database
+        if (renewal) {
+          await addRenewalFile.mutateAsync({
+            renewalId: renewal.id,
+            fileUrl: urlData.publicUrl,
+            fileName: file.name,
+            fileSize: file.size,
+          });
+        } else {
+          // If new renewal, store pending files
+          setPendingFiles(prev => [...prev, {
+            url: urlData.publicUrl,
+            name: file.name,
+            size: file.size,
+          }]);
+        }
 
-      // Read file content for extraction
-      if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-        const text = await file.text();
-        setExtractedText(text);
-      } else {
-        toast.info('For AI extraction, please also paste the document text below');
+        // Read file content for extraction (only for text files)
+        if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+          const text = await file.text();
+          setExtractedText(prev => prev + (prev ? '\n\n' : '') + text);
+        }
       }
 
-      toast.success('File uploaded');
+      toast.success(`${files.length} file(s) uploaded`);
     } catch (error) {
       console.error('Upload error:', error);
       toast.error('Failed to upload file');
     } finally {
       setIsUploading(false);
+      // Reset input
+      e.target.value = '';
     }
+  };
+
+  const handleDeletePendingFile = (index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleExtract = async () => {
@@ -131,7 +154,7 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
     try {
       const result = await extractContract.mutateAsync({
         text: extractedText,
-        fileName: fileName || undefined,
+        fileName: pendingFiles[0]?.name || existingFiles?.[0]?.file_name || undefined,
       });
 
       if (result) {
@@ -167,20 +190,38 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
       agreement_start: agreementStart ? format(agreementStart, 'yyyy-MM-dd') : null,
       agreement_end: agreementEnd ? format(agreementEnd, 'yyyy-MM-dd') : null,
       notes: notes.trim() || null,
-      file_url: fileUrl,
-      file_name: fileName,
+      person_or_address: personOrAddress.trim() || null,
+      file_url: null,
+      file_name: null,
       added_to_expenses: renewal?.added_to_expenses ?? false,
       linked_expense_id: renewal?.linked_expense_id ?? null,
     };
 
-    if (renewal) {
-      await updateRenewal.mutateAsync({ id: renewal.id, ...data });
-    } else {
-      await createRenewal.mutateAsync(data);
+    try {
+      if (renewal) {
+        await updateRenewal.mutateAsync({ id: renewal.id, ...data });
+      } else {
+        const newRenewal = await createRenewal.mutateAsync(data);
+        // Add pending files to the new renewal
+        for (const pf of pendingFiles) {
+          await addRenewalFile.mutateAsync({
+            renewalId: newRenewal.id,
+            fileUrl: pf.url,
+            fileName: pf.name,
+            fileSize: pf.size,
+          });
+        }
+      }
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Submit error:', error);
     }
-
-    onOpenChange(false);
   };
+
+  const allFiles = [
+    ...(existingFiles || []).map(f => ({ id: f.id, name: f.file_name, url: f.file_url, isExisting: true })),
+    ...pendingFiles.map((f, i) => ({ id: `pending-${i}`, name: f.name, url: f.url, isExisting: false })),
+  ];
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -204,12 +245,50 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
                 onChange={handleFileUpload}
                 className="flex-1"
                 disabled={isUploading}
+                multiple
               />
               {isUploading && <Loader2 className="h-5 w-5 animate-spin" />}
             </div>
             
-            {fileName && (
-              <p className="text-xs text-muted-foreground">Uploaded: {fileName}</p>
+            {/* Files list */}
+            {allFiles.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Relevant Files ({allFiles.length})</p>
+                {allFiles.map((file) => (
+                  <div key={file.id} className="flex items-center justify-between p-2 rounded bg-background border text-xs">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <span className="truncate">{file.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => window.open(file.url, '_blank')}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-destructive"
+                        onClick={() => {
+                          if (file.isExisting && renewal) {
+                            deleteRenewalFile.mutate({ id: file.id, renewalId: renewal.id });
+                          } else {
+                            handleDeletePendingFile(parseInt(file.id.replace('pending-', '')));
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
 
             <Textarea
@@ -340,6 +419,15 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
                   </PopoverContent>
                 </Popover>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Person / Address</Label>
+              <Input
+                value={personOrAddress}
+                onChange={(e) => setPersonOrAddress(e.target.value)}
+                placeholder="e.g. Dad, Nan, 123 Main St..."
+              />
             </div>
 
             <div className="space-y-2">

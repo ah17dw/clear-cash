@@ -18,8 +18,19 @@ export interface Renewal {
   file_name: string | null;
   added_to_expenses: boolean;
   linked_expense_id: string | null;
+  person_or_address: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface RenewalFile {
+  id: string;
+  user_id: string;
+  renewal_id: string;
+  file_url: string;
+  file_name: string;
+  file_size: number | null;
+  uploaded_at: string;
 }
 
 export function useRenewals() {
@@ -38,6 +49,77 @@ export function useRenewals() {
       return data as Renewal[];
     },
     enabled: !!user,
+  });
+}
+
+export function useRenewalFiles(renewalId: string) {
+  return useQuery({
+    queryKey: ['renewal_files', renewalId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('renewal_files')
+        .select('*')
+        .eq('renewal_id', renewalId)
+        .order('uploaded_at', { ascending: false });
+
+      if (error) throw error;
+      return data as RenewalFile[];
+    },
+    enabled: !!renewalId,
+  });
+}
+
+export function useAddRenewalFile() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ renewalId, fileUrl, fileName, fileSize }: { renewalId: string; fileUrl: string; fileName: string; fileSize?: number }) => {
+      const { data, error } = await supabase
+        .from('renewal_files')
+        .insert({
+          user_id: user!.id,
+          renewal_id: renewalId,
+          file_url: fileUrl,
+          file_name: fileName,
+          file_size: fileSize,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['renewal_files', variables.renewalId] });
+      toast.success('File added');
+    },
+    onError: () => {
+      toast.error('Failed to add file');
+    },
+  });
+}
+
+export function useDeleteRenewalFile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, renewalId }: { id: string; renewalId: string }) => {
+      const { error } = await supabase
+        .from('renewal_files')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      return renewalId;
+    },
+    onSuccess: (renewalId) => {
+      queryClient.invalidateQueries({ queryKey: ['renewal_files', renewalId] });
+      toast.success('File removed');
+    },
+    onError: () => {
+      toast.error('Failed to remove file');
+    },
   });
 }
 
