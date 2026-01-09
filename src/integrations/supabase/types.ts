@@ -268,6 +268,44 @@ export type Database = {
         }
         Relationships: []
       }
+      renewal_files: {
+        Row: {
+          file_name: string
+          file_size: number | null
+          file_url: string
+          id: string
+          renewal_id: string
+          uploaded_at: string
+          user_id: string
+        }
+        Insert: {
+          file_name: string
+          file_size?: number | null
+          file_url: string
+          id?: string
+          renewal_id: string
+          uploaded_at?: string
+          user_id: string
+        }
+        Update: {
+          file_name?: string
+          file_size?: number | null
+          file_url?: string
+          id?: string
+          renewal_id?: string
+          uploaded_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "renewal_files_renewal_id_fkey"
+            columns: ["renewal_id"]
+            isOneToOne: false
+            referencedRelation: "renewals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       renewals: {
         Row: {
           added_to_expenses: boolean
@@ -282,6 +320,7 @@ export type Database = {
           monthly_amount: number
           name: string
           notes: string | null
+          person_or_address: string | null
           provider: string | null
           total_cost: number
           updated_at: string
@@ -300,6 +339,7 @@ export type Database = {
           monthly_amount?: number
           name: string
           notes?: string | null
+          person_or_address?: string | null
           provider?: string | null
           total_cost?: number
           updated_at?: string
@@ -318,6 +358,7 @@ export type Database = {
           monthly_amount?: number
           name?: string
           notes?: string | null
+          person_or_address?: string | null
           provider?: string | null
           total_cost?: number
           updated_at?: string

@@ -1,10 +1,9 @@
 import { useState, useMemo } from 'react';
-import { FileText, Plus, Trash2, Edit2, ArrowUpDown, ExternalLink, Check, Calendar } from 'lucide-react';
+import { FileText, Plus, Trash2, Edit2, ArrowUpDown, ExternalLink, Check, Calendar, User, Filter } from 'lucide-react';
 import { format, differenceInDays, isPast } from 'date-fns';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { useRenewals, useDeleteRenewal, useAddRenewalToExpenses, Renewal } from '@/hooks/useRenewals';
 import { RenewalFormSheet } from '@/components/renewals/RenewalFormSheet';
@@ -19,10 +18,25 @@ export default function Renewals() {
   const [showForm, setShowForm] = useState(false);
   const [editingRenewal, setEditingRenewal] = useState<Renewal | undefined>();
   const [sortBy, setSortBy] = useState<SortOption>('expiry');
+  const [filterPerson, setFilterPerson] = useState<string | null>(null);
+
+  // Get unique persons/addresses for filter
+  const uniquePersons = useMemo(() => {
+    if (!renewals) return [];
+    const persons = renewals
+      .map(r => r.person_or_address)
+      .filter((p): p is string => !!p);
+    return [...new Set(persons)].sort();
+  }, [renewals]);
+
+  const filteredRenewals = useMemo(() => {
+    if (!renewals) return [];
+    if (!filterPerson) return renewals;
+    return renewals.filter(r => r.person_or_address === filterPerson);
+  }, [renewals, filterPerson]);
 
   const sortedRenewals = useMemo(() => {
-    if (!renewals) return [];
-    return [...renewals].sort((a, b) => {
+    return [...filteredRenewals].sort((a, b) => {
       if (sortBy === 'expiry') {
         if (!a.agreement_end && !b.agreement_end) return 0;
         if (!a.agreement_end) return 1;
@@ -34,16 +48,16 @@ export default function Renewals() {
       }
       return a.name.localeCompare(b.name);
     });
-  }, [renewals, sortBy]);
+  }, [filteredRenewals, sortBy]);
 
-  const totalAnnualCost = renewals?.reduce((sum, r) => sum + (r.total_cost || 0), 0) ?? 0;
-  const totalMonthlyCost = renewals?.reduce((sum, r) => sum + (r.monthly_amount || 0), 0) ?? 0;
-  const expiringThisMonth = renewals?.filter(r => {
+  const totalAnnualCost = filteredRenewals.reduce((sum, r) => sum + (r.total_cost || 0), 0);
+  const totalMonthlyCost = filteredRenewals.reduce((sum, r) => sum + (r.monthly_amount || 0), 0);
+  const expiringThisMonth = filteredRenewals.filter(r => {
     if (!r.agreement_end) return false;
     const endDate = new Date(r.agreement_end);
     const daysUntil = differenceInDays(endDate, new Date());
     return daysUntil >= 0 && daysUntil <= 30;
-  }).length ?? 0;
+  }).length;
 
   const getExpiryStatus = (endDate: string | null) => {
     if (!endDate) return null;
@@ -103,18 +117,44 @@ export default function Renewals() {
         </div>
       </div>
 
-      {/* Sort Controls */}
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold">Contracts & Agreements</h2>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setSortBy(sortBy === 'expiry' ? 'value' : sortBy === 'value' ? 'name' : 'expiry')}
-          className="text-xs"
-        >
-          <ArrowUpDown className="h-3 w-3 mr-1" />
-          {sortBy === 'expiry' ? 'By Expiry' : sortBy === 'value' ? 'By Value' : 'By Name'}
-        </Button>
+      {/* Filter & Sort Controls */}
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <h2 className="text-lg font-semibold flex-shrink-0">Contracts</h2>
+        <div className="flex items-center gap-2 overflow-x-auto">
+          {uniquePersons.length > 0 && (
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant={filterPerson === null ? 'secondary' : 'outline'}
+                onClick={() => setFilterPerson(null)}
+                className="text-xs px-2 h-7"
+              >
+                All
+              </Button>
+              {uniquePersons.map((person) => (
+                <Button
+                  key={person}
+                  size="sm"
+                  variant={filterPerson === person ? 'secondary' : 'outline'}
+                  onClick={() => setFilterPerson(person)}
+                  className="text-xs px-2 h-7"
+                >
+                  <User className="h-3 w-3 mr-1" />
+                  {person}
+                </Button>
+              ))}
+            </div>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setSortBy(sortBy === 'expiry' ? 'value' : sortBy === 'value' ? 'name' : 'expiry')}
+            className="text-xs h-7"
+          >
+            <ArrowUpDown className="h-3 w-3 mr-1" />
+            {sortBy === 'expiry' ? 'Expiry' : sortBy === 'value' ? 'Value' : 'Name'}
+          </Button>
+        </div>
       </div>
 
       {/* Renewals List */}
@@ -148,7 +188,16 @@ export default function Renewals() {
                           </Badge>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                        {renewal.person_or_address && (
+                          <>
+                            <span className="flex items-center gap-0.5">
+                              <User className="h-3 w-3" />
+                              {renewal.person_or_address}
+                            </span>
+                            <span>·</span>
+                          </>
+                        )}
                         {renewal.provider && <span>{renewal.provider}</span>}
                         {renewal.provider && renewal.agreement_end && <span>·</span>}
                         {renewal.agreement_end && (
