@@ -1,8 +1,8 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { SavingsAccount } from '@/types/finance';
-import { format, addMonths, subMonths } from 'date-fns';
-import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { format, addMonths } from 'date-fns';
+import { AlertTriangle, CheckCircle2, TrendingUp } from 'lucide-react';
 
 interface InterestStatementSheetProps {
   open: boolean;
@@ -12,94 +12,157 @@ interface InterestStatementSheetProps {
 
 // UK Personal Savings Allowance for 2024/25
 const UK_TAX_ALLOWANCE_BASIC = 1000; // Basic rate taxpayer
-const UK_TAX_ALLOWANCE_HIGHER = 500; // Higher rate taxpayer
 const UK_TAX_RATE = 0.20; // Assuming basic rate
 
-interface MonthlyInterest {
+interface MonthlyProjection {
   month: Date;
-  interest: number;
-  breakdown: { account: string; interest: number }[];
+  startingBalance: number;
+  interestEarned: number;
+  endingBalance: number;
+  breakdown: { account: string; balance: number; interest: number }[];
+}
+
+function calculateCompoundingProjections(accounts: SavingsAccount[], months: number = 12): MonthlyProjection[] {
+  const today = new Date();
+  const projections: MonthlyProjection[] = [];
+  
+  // Track running balance per account
+  const balances = accounts.map(a => ({
+    account: a.name,
+    balance: Number(a.balance),
+    aer: Number(a.aer),
+  }));
+
+  for (let i = 0; i < months; i++) {
+    const monthDate = addMonths(today, i);
+    const startingBalance = balances.reduce((sum, b) => sum + b.balance, 0);
+    
+    const breakdown = balances.map(b => {
+      const monthlyRate = b.aer / 100 / 12;
+      const interest = b.balance * monthlyRate;
+      return {
+        account: b.account,
+        balance: b.balance,
+        interest,
+      };
+    });
+    
+    const interestEarned = breakdown.reduce((sum, b) => sum + b.interest, 0);
+    
+    // Add interest to balances for next month (compounding)
+    balances.forEach((b, idx) => {
+      b.balance += breakdown[idx].interest;
+    });
+    
+    const endingBalance = balances.reduce((sum, b) => sum + b.balance, 0);
+    
+    projections.push({
+      month: monthDate,
+      startingBalance,
+      interestEarned,
+      endingBalance,
+      breakdown,
+    });
+  }
+
+  return projections;
 }
 
 export function InterestStatementSheet({ open, onOpenChange, accounts }: InterestStatementSheetProps) {
   const today = new Date();
   
-  // Calculate monthly interest for 1 month back and 12 months forward
-  const months: MonthlyInterest[] = [];
-  
-  // 1 month back
-  for (let i = -1; i <= 12; i++) {
-    const monthDate = addMonths(today, i);
-    const breakdown = accounts.map(account => ({
-      account: account.name,
-      interest: (Number(account.balance) * Number(account.aer)) / 100 / 12
-    }));
-    
-    months.push({
-      month: monthDate,
-      interest: breakdown.reduce((sum, b) => sum + b.interest, 0),
-      breakdown
-    });
-  }
+  // Generate 12-month compounding projections
+  const projections = calculateCompoundingProjections(accounts, 12);
   
   // Calculate totals
-  const totalAnnualInterest = accounts.reduce(
+  const currentBalance = accounts.reduce((sum, a) => sum + Number(a.balance), 0);
+  const totalProjectedInterest = projections.reduce((sum, p) => sum + p.interestEarned, 0);
+  const finalProjectedBalance = projections.length > 0 ? projections[projections.length - 1].endingBalance : currentBalance;
+
+  // Simple annual interest (no compounding) for tax estimate
+  const simpleAnnualInterest = accounts.reduce(
     (sum, a) => sum + (Number(a.balance) * Number(a.aer)) / 100,
     0
   );
 
-  // Special case: "Etorro ISA" assumed tax-free up to £20k of balance
+  // Special case: ISA accounts assumed tax-free
   const ISA_TAX_FREE_BALANCE_CAP = 20000;
   const taxFreeIsaAnnualInterest = accounts.reduce((sum, a) => {
     const name = (a.name ?? '').toLowerCase();
-    const isEtoroIsa = name.includes('etor') && name.includes('isa');
-    if (!isEtoroIsa) return sum;
+    const isIsa = name.includes('isa');
+    if (!isIsa) return sum;
 
     const taxFreeBalance = Math.min(Number(a.balance), ISA_TAX_FREE_BALANCE_CAP);
     return sum + (taxFreeBalance * Number(a.aer)) / 100;
   }, 0);
 
-  const taxableAnnualInterest = Math.max(0, totalAnnualInterest - taxFreeIsaAnnualInterest);
-
+  const taxableAnnualInterest = Math.max(0, simpleAnnualInterest - taxFreeIsaAnnualInterest);
   const overAllowance = taxableAnnualInterest - UK_TAX_ALLOWANCE_BASIC;
   const taxableAmount = Math.max(0, overAllowance);
   const estimatedTax = taxableAmount * UK_TAX_RATE;
-  
-  const isPast = (date: Date) => date < today;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[85vh] overflow-y-auto">
+      <SheetContent side="bottom" className="h-[90vh] overflow-y-auto">
         <SheetHeader className="mb-4">
-          <SheetTitle>Interest Statement</SheetTitle>
+          <SheetTitle>Interest Projection & Statement</SheetTitle>
         </SheetHeader>
+
+        {/* 12-Month Summary */}
+        <div className="finance-card finance-card-savings mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp className="h-5 w-5 text-savings" />
+            <h3 className="font-medium">12-Month Projection</h3>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="p-3 rounded-lg bg-savings-muted">
+              <p className="text-xs text-muted-foreground">Current Balance</p>
+              <AmountDisplay amount={currentBalance} size="md" className="text-savings" />
+            </div>
+            <div className="p-3 rounded-lg bg-savings-muted">
+              <p className="text-xs text-muted-foreground">Projected in 12 Months</p>
+              <AmountDisplay amount={finalProjectedBalance} size="md" className="text-savings" />
+            </div>
+          </div>
+          
+          <div className="p-3 rounded-lg bg-primary/10">
+            <div className="flex justify-between items-center">
+              <p className="text-sm font-medium">Total Interest (Compounded)</p>
+              <AmountDisplay amount={totalProjectedInterest} size="md" className="text-savings" />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Assuming no withdrawals and constant AER rates
+            </p>
+          </div>
+        </div>
 
         {/* Tax Summary */}
         <div className="finance-card mb-4">
           <h3 className="font-medium mb-3">UK Tax Summary (2024/25)</h3>
           
-           <div className="space-y-2">
-             <div className="flex justify-between">
-               <span className="text-sm text-muted-foreground">Estimated Annual Interest (gross)</span>
-               <AmountDisplay amount={totalAnnualInterest} size="sm" />
-             </div>
+          <div className="space-y-2">
+            <div className="flex justify-between">
+              <span className="text-sm text-muted-foreground">Est. Annual Interest (simple)</span>
+              <AmountDisplay amount={simpleAnnualInterest} size="sm" />
+            </div>
 
-             {taxFreeIsaAnnualInterest > 0 && (
-               <div className="flex justify-between">
-                 <span className="text-sm text-muted-foreground">Tax-free ISA interest (Etoro cap £20k)</span>
-                 <AmountDisplay amount={taxFreeIsaAnnualInterest} size="sm" />
-               </div>
-             )}
+            {taxFreeIsaAnnualInterest > 0 && (
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Tax-free ISA interest</span>
+                <AmountDisplay amount={taxFreeIsaAnnualInterest} size="sm" />
+              </div>
+            )}
 
-             <div className="flex justify-between">
-               <span className="text-sm text-muted-foreground">Taxable Interest (est.)</span>
-               <AmountDisplay amount={taxableAnnualInterest} size="sm" />
-             </div>
-             
-             <div className="flex justify-between">
-               <span className="text-sm text-muted-foreground">Personal Savings Allowance</span>
-               <AmountDisplay amount={UK_TAX_ALLOWANCE_BASIC} size="sm" />
-             </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-muted-foreground">Taxable Interest</span>
+              <AmountDisplay amount={taxableAnnualInterest} size="sm" />
+            </div>
+            
+            <div className="flex justify-between">
+              <span className="text-sm text-muted-foreground">Personal Savings Allowance</span>
+              <AmountDisplay amount={UK_TAX_ALLOWANCE_BASIC} size="sm" />
+            </div>
             
             <div className="border-t border-border pt-2">
               {overAllowance <= 0 ? (
@@ -130,34 +193,38 @@ export function InterestStatementSheet({ open, onOpenChange, accounts }: Interes
             </div>
           </div>
           
-           <p className="text-xs text-muted-foreground mt-3">
-             * Allowance shown is for basic rate (£1,000). This also assumes your Etorro ISA is tax-free only up to £20k of balance.
-           </p>
+          <p className="text-xs text-muted-foreground mt-3">
+            * Allowance shown is for basic rate (£1,000). ISA interest is tax-free.
+          </p>
         </div>
 
-        {/* Monthly Breakdown */}
+        {/* Monthly Breakdown with Compounding */}
         <div className="finance-card">
-          <h3 className="font-medium mb-3">Monthly Interest Projection</h3>
+          <h3 className="font-medium mb-3">Monthly Projection (Compounding)</h3>
           
           <div className="space-y-3">
-            {months.map((m, index) => (
+            {projections.map((p, index) => (
               <div 
                 key={index}
-                className={`pb-3 border-b border-border last:border-0 ${isPast(m.month) ? 'opacity-60' : ''}`}
+                className="pb-3 border-b border-border last:border-0"
               >
-                <div className="flex justify-between items-center mb-1">
+                <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-medium">
-                    {format(m.month, 'MMMM yyyy')}
-                    {isPast(m.month) && <span className="text-xs text-muted-foreground ml-2">(Past)</span>}
+                    {format(p.month, 'MMMM yyyy')}
                   </span>
-                  <AmountDisplay amount={m.interest} size="sm" className="text-savings" />
+                  <div className="text-right">
+                    <AmountDisplay amount={p.endingBalance} size="sm" className="text-savings" />
+                    <p className="text-xs text-muted-foreground">
+                      +£{p.interestEarned.toFixed(2)} interest
+                    </p>
+                  </div>
                 </div>
                 
                 <div className="space-y-1 pl-2">
-                  {m.breakdown.map((b, i) => (
+                  {p.breakdown.map((b, i) => (
                     <div key={i} className="flex justify-between text-xs text-muted-foreground">
                       <span>{b.account}</span>
-                      <span>£{b.interest.toFixed(2)}</span>
+                      <span>£{b.balance.toFixed(2)} → +£{b.interest.toFixed(2)}</span>
                     </div>
                   ))}
                 </div>

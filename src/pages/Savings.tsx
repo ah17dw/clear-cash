@@ -77,7 +77,18 @@ export default function Savings() {
       ) : (
         <div className="space-y-2">
           {accounts?.map((account, index) => {
-            const monthlyInterest = (Number(account.balance) * Number(account.aer)) / 100 / 12;
+            const balance = Number(account.balance);
+            const aer = Number(account.aer);
+            const monthlyInterest = (balance * aer) / 100 / 12;
+            const yearlyInterest = (balance * aer) / 100;
+            
+            // Calculate 12-month compounded projection
+            let projectedBalance = balance;
+            const monthlyRate = aer / 100 / 12;
+            for (let i = 0; i < 12; i++) {
+              projectedBalance += projectedBalance * monthlyRate;
+            }
+            const projectedInterest = projectedBalance - balance;
             
             return (
               <button
@@ -93,15 +104,18 @@ export default function Savings() {
                   <p className="font-medium truncate">{account.name}</p>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                     {account.provider && <span className="truncate">{account.provider}</span>}
+                    <span className="flex items-center gap-0.5">
+                      <Percent className="h-3 w-3" />
+                      {aer}% AER
+                    </span>
                   </div>
                 </div>
 
                 <div className="text-right flex-shrink-0">
-                  <AmountDisplay amount={Number(account.balance)} size="sm" className="text-savings" />
-                  <div className="flex items-center justify-end gap-1 mt-0.5">
-                    <Percent className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">{account.aer}% AER</span>
-                  </div>
+                  <AmountDisplay amount={balance} size="sm" className="text-savings" />
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    +£{projectedInterest.toFixed(0)}/yr
+                  </p>
                 </div>
 
                 <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
