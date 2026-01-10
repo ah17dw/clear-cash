@@ -2,3 +2,6 @@ project_id = "yzzncwyurvikmwzdkbvv"
 
 [functions.extract-contract]
 verify_jwt = false
+
+[functions.tag-task]
+verify_jwt = false

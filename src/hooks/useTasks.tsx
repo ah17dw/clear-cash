@@ -148,26 +148,27 @@ export function useTaskTags(taskId: string) {
 }
 
 export function useAddTaskTag() {
-  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ taskId, taggedEmail }: { taskId: string; taggedEmail: string }) => {
-      const { data, error } = await supabase
-        .from('task_tags')
-        .insert({ task_id: taskId, tagged_email: taggedEmail, created_by: user!.id })
-        .select()
-        .single();
+      const { data, error } = await supabase.functions.invoke('tag-task', {
+        body: { taskId, taggedEmail },
+      });
 
       if (error) throw error;
-      return data;
+      if (data?.error) throw new Error(data.error);
+
+      return data?.data;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['task_tags', variables.taskId] });
-      toast.success('User tagged');
+      toast.success('User tagged (email sent)');
     },
-    onError: () => {
-      toast.error('Failed to tag user');
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : 'Failed to tag user';
+      console.error('Tag user error:', error);
+      toast.error(message);
     },
   });
 }
