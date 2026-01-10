@@ -69,6 +69,19 @@ export function useRenewalFiles(renewalId: string) {
   });
 }
 
+// Helper function to get signed URL for private bucket files
+export async function getSignedFileUrl(filePath: string): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from('renewal-files')
+    .createSignedUrl(filePath, 3600); // 1 hour expiry
+
+  if (error) {
+    console.error('Error getting signed URL:', error);
+    return null;
+  }
+  return data.signedUrl;
+}
+
 export function useAddRenewalFile() {
   const { user } = useAuth();
   const queryClient = useQueryClient();

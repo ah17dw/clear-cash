@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarIcon, Upload, Sparkles, Loader2, FileText, Trash2, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { useCreateRenewal, useUpdateRenewal, useExtractContract, useRenewalFiles, useAddRenewalFile, useDeleteRenewalFile, Renewal } from '@/hooks/useRenewals';
+import { useCreateRenewal, useUpdateRenewal, useExtractContract, useRenewalFiles, useAddRenewalFile, useDeleteRenewalFile, getSignedFileUrl, Renewal } from '@/hooks/useRenewals';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -101,22 +101,21 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
 
         if (uploadError) throw uploadError;
 
-        const { data: urlData } = supabase.storage
-          .from('renewal-files')
-          .getPublicUrl(filePath);
+        // Store the file path (not public URL) for private bucket
+        const storedPath = filePath;
 
         // If editing existing renewal, add file directly to database
         if (renewal) {
           await addRenewalFile.mutateAsync({
             renewalId: renewal.id,
-            fileUrl: urlData.publicUrl,
+            fileUrl: storedPath,
             fileName: file.name,
             fileSize: file.size,
           });
         } else {
           // If new renewal, store pending files
           setPendingFiles(prev => [...prev, {
-            url: urlData.publicUrl,
+            url: storedPath,
             name: file.name,
             size: file.size,
           }]);
@@ -266,7 +265,18 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
                         variant="ghost"
                         size="icon"
                         className="h-6 w-6"
-                        onClick={() => window.open(file.url, '_blank')}
+                        onClick={async () => {
+                          // For existing files, get signed URL; for pending files, use path directly
+                          if (file.isExisting) {
+                            const signedUrl = await getSignedFileUrl(file.url);
+                            if (signedUrl) window.open(signedUrl, '_blank');
+                            else toast.error('Failed to get file URL');
+                          } else {
+                            const signedUrl = await getSignedFileUrl(file.url);
+                            if (signedUrl) window.open(signedUrl, '_blank');
+                            else toast.error('Failed to get file URL');
+                          }
+                        }}
                       >
                         <ExternalLink className="h-3 w-3" />
                       </Button>
