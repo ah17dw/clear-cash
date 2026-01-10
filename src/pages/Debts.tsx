@@ -1,20 +1,25 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CreditCard, ChevronRight, Calendar, Percent } from 'lucide-react';
+import { CreditCard, ChevronRight, Calendar, Percent, CalendarDays } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
-import { useDebts } from '@/hooks/useFinanceData';
+import { Button } from '@/components/ui/button';
+import { useDebts, useExpenseItems, useIncomeSources } from '@/hooks/useFinanceData';
 import { getDaysUntil, formatDateShort } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { DebtFormSheet } from '@/components/debts/DebtFormSheet';
 import { getAdjustedBalance } from '@/lib/debt-utils';
+import { FinanceCalendar } from '@/components/finance/FinanceCalendar';
 
 type SortOption = 'balance' | 'apr' | 'promo_ending';
 
 export default function Debts() {
   const navigate = useNavigate();
   const { data: debts, isLoading } = useDebts();
+  const { data: expenses } = useExpenseItems();
+  const { data: income } = useIncomeSources();
   const [showForm, setShowForm] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('balance');
 
   const sortedDebts = [...(debts || [])].sort((a, b) => {
@@ -65,7 +70,18 @@ export default function Debts() {
 
       {/* Monthly Outgoings Summary */}
       <div className="finance-card mb-4">
-        <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Monthly Debt Outgoings</p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">Monthly Debt Outgoings</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowCalendar(!showCalendar)}
+            className="text-xs gap-1"
+          >
+            <CalendarDays className="h-3.5 w-3.5" />
+            Calendar
+          </Button>
+        </div>
         <AmountDisplay amount={totalMinimums} size="lg" />
         <p className="text-xs text-muted-foreground mt-1">Sum of minimum monthly payments</p>
         {totalPlanned !== totalMinimums && (
@@ -99,6 +115,13 @@ export default function Debts() {
           </button>
         ))}
       </div>
+
+      {/* Calendar View */}
+      {showCalendar && (
+        <div className="mb-4">
+          <FinanceCalendar debts={debts} expenses={expenses} income={income} />
+        </div>
+      )}
 
       {/* Debts List */}
       {isLoading ? (

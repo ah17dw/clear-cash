@@ -1,12 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { Trash2, TrendingUp } from 'lucide-react';
+import { Trash2, TrendingUp, Calendar } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
 import { useSavingsAccount, useDeleteSavingsAccount } from '@/hooks/useFinanceData';
 import { formatPercentage, formatCurrency } from '@/lib/format';
 import { SavingsFormSheet } from '@/components/savings/SavingsFormSheet';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { format, addMonths } from 'date-fns';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,6 +48,27 @@ export default function SavingsDetail() {
   const aer = Number(account.aer);
   const monthlyInterest = (balance * aer) / 100 / 12;
   const yearlyInterest = (balance * aer) / 100;
+
+  // Calculate 12-month compounding projection
+  const monthlyProjections = useMemo(() => {
+    const projections: { month: Date; balance: number; interest: number }[] = [];
+    let runningBalance = balance;
+    const monthlyRate = aer / 100 / 12;
+    
+    for (let i = 0; i < 12; i++) {
+      const interest = runningBalance * monthlyRate;
+      runningBalance += interest;
+      projections.push({
+        month: addMonths(new Date(), i),
+        balance: runningBalance,
+        interest,
+      });
+    }
+    return projections;
+  }, [balance, aer]);
+
+  const projectedBalance12Mo = monthlyProjections[11]?.balance ?? balance;
+  const totalProjectedInterest = projectedBalance12Mo - balance;
 
   return (
     <div className="page-container">
@@ -101,14 +123,46 @@ export default function SavingsDetail() {
             <TrendingUp className="h-4 w-4 text-savings" />
             <p className="font-medium">Estimated Interest</p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4 mb-4">
             <div className="p-3 rounded-lg bg-savings-muted">
               <p className="text-xs text-muted-foreground">Monthly</p>
               <AmountDisplay amount={monthlyInterest} size="sm" className="text-savings" />
             </div>
             <div className="p-3 rounded-lg bg-savings-muted">
-              <p className="text-xs text-muted-foreground">Yearly</p>
+              <p className="text-xs text-muted-foreground">Yearly (simple)</p>
               <AmountDisplay amount={yearlyInterest} size="sm" className="text-savings" />
+            </div>
+          </div>
+          
+          {/* 12-Month Compounding Projection */}
+          <div className="p-3 rounded-lg bg-primary/10 mb-4">
+            <p className="text-xs text-muted-foreground mb-1">12-Month Projection (Compounding)</p>
+            <div className="flex justify-between items-center">
+              <div>
+                <AmountDisplay amount={projectedBalance12Mo} size="md" className="text-savings" />
+                <p className="text-xs text-muted-foreground">
+                  +£{totalProjectedInterest.toFixed(2)} interest
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Monthly Breakdown */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              Monthly Breakdown
+            </p>
+            <div className="max-h-48 overflow-y-auto space-y-1">
+              {monthlyProjections.map((p, i) => (
+                <div key={i} className="flex justify-between text-xs py-1 border-b border-border/50 last:border-0">
+                  <span className="text-muted-foreground">{format(p.month, 'MMM yyyy')}</span>
+                  <span>
+                    £{p.balance.toFixed(2)}
+                    <span className="text-savings ml-1">(+£{p.interest.toFixed(2)})</span>
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

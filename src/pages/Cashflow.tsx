@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownCircle, ArrowUpCircle, Plus, Trash2, Edit2, Users, ArrowUpDown, ChevronRight } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Plus, Trash2, Edit2, Users, ArrowUpDown, ChevronRight, CalendarDays } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { useAllSubExpenses } from '@/hooks/useSubExpenses';
 import { IncomeFormSheet } from '@/components/cashflow/IncomeFormSheet';
 import { ExpenseFormSheet } from '@/components/cashflow/ExpenseFormSheet';
 import { SubExpenseSheet } from '@/components/cashflow/SubExpenseSheet';
+import { FinanceCalendar } from '@/components/finance/FinanceCalendar';
 import { EXPENSE_CATEGORIES, IncomeSource, ExpenseItem } from '@/types/finance';
 
 type SortOption = 'due' | 'value';
@@ -38,6 +39,7 @@ export default function Cashflow() {
   const [editingExpense, setEditingExpense] = useState<ExpenseItem | undefined>();
   const [showSubExpenseSheet, setShowSubExpenseSheet] = useState(false);
   const [selectedExpenseForSub, setSelectedExpenseForSub] = useState<ExpenseItem | undefined>();
+  const [showCalendar, setShowCalendar] = useState(false);
   
   const [sortBy, setSortBy] = useState<SortOption>('value');
 
@@ -115,23 +117,41 @@ export default function Cashflow() {
 
       {/* Summary Card */}
       <div className="finance-card mb-4">
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Income</p>
-            <AmountDisplay amount={totalIncome} size="sm" className="text-savings" />
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Outgoings</p>
-            <AmountDisplay amount={totalOutgoings} size="sm" className="text-debt" />
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">
-              {surplus >= 0 ? 'Surplus' : 'Deficit'}
-            </p>
-            <AmountDisplay amount={surplus} size="sm" showSign />
+        <div className="flex items-center justify-between mb-3">
+          <div className="grid grid-cols-3 gap-4 text-center flex-1">
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Income</p>
+              <AmountDisplay amount={totalIncome} size="sm" className="text-savings" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Outgoings</p>
+              <AmountDisplay amount={totalOutgoings} size="sm" className="text-debt" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                {surplus >= 0 ? 'Surplus' : 'Deficit'}
+              </p>
+              <AmountDisplay amount={surplus} size="sm" showSign />
+            </div>
           </div>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowCalendar(!showCalendar)}
+          className="w-full text-xs gap-1"
+        >
+          <CalendarDays className="h-3.5 w-3.5" />
+          {showCalendar ? 'Hide Calendar' : 'View Calendar'}
+        </Button>
       </div>
+
+      {/* Calendar View */}
+      {showCalendar && (
+        <div className="mb-4">
+          <FinanceCalendar debts={debts} expenses={expenses} income={income} />
+        </div>
+      )}
 
       {/* Income Section */}
       <div className="finance-card mb-4">
