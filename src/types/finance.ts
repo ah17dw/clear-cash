@@ -57,6 +57,8 @@ export interface IncomeSource {
   user_id: string;
   name: string;
   monthly_amount: number;
+  start_date?: string | null;
+  end_date?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -73,6 +75,8 @@ export interface ExpenseItem {
   reminder_email?: boolean;
   reminder_sms?: boolean;
   reminder_days_before?: number;
+  start_date?: string | null;
+  end_date?: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -11,6 +11,7 @@ export interface Renewal {
   total_cost: number;
   monthly_amount: number;
   is_monthly_payment: boolean;
+  frequency: 'weekly' | 'monthly' | 'annually';
   agreement_start: string | null;
   agreement_end: string | null;
   notes: string | null;

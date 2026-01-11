@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownCircle, ArrowUpCircle, Plus, Trash2, Edit2, Users, ArrowUpDown, ChevronRight, CalendarDays } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Plus, Trash2, Users, ArrowUpDown, ChevronRight, CalendarDays } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
@@ -177,7 +177,11 @@ export default function Cashflow() {
             {income.map((source) => (
               <div
                 key={source.id}
-                className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                className="flex items-center justify-between py-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 rounded transition-colors"
+                onDoubleClick={() => {
+                  setEditingIncome(source);
+                  setShowIncomeForm(true);
+                }}
               >
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-savings/20 flex items-center justify-center text-savings font-semibold text-sm">
@@ -187,17 +191,6 @@ export default function Cashflow() {
                 </div>
                 <div className="flex items-center gap-2">
                   <AmountDisplay amount={Number(source.monthly_amount)} size="sm" />
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7"
-                    onClick={() => {
-                      setEditingIncome(source);
-                      setShowIncomeForm(true);
-                    }}
-                  >
-                    <Edit2 className="h-3 w-3" />
-                  </Button>
                   <Button
                     size="icon"
                     variant="ghost"
@@ -264,7 +257,8 @@ export default function Cashflow() {
               return (
                 <div
                   key={expense.id}
-                  className="flex items-center justify-between py-2 border-b border-border last:border-0"
+                  className="flex items-center justify-between py-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 rounded transition-colors"
+                  onDoubleClick={() => { setEditingExpense(expense); setShowExpenseForm(true); }}
                 >
                   <div 
                     className="flex items-center gap-3 flex-1 cursor-pointer"
@@ -306,17 +300,6 @@ export default function Cashflow() {
                         className="scale-75"
                       />
                     </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7"
-                      onClick={() => {
-                        setEditingExpense(expense);
-                        setShowExpenseForm(true);
-                      }}
-                    >
-                      <Edit2 className="h-3 w-3" />
-                    </Button>
                     <Button
                       size="icon"
                       variant="ghost"
