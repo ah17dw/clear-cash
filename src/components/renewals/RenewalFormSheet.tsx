@@ -7,6 +7,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { CalendarIcon, Upload, Sparkles, Loader2, FileText, Trash2, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -20,6 +27,12 @@ interface RenewalFormSheetProps {
   onOpenChange: (open: boolean) => void;
   renewal?: Renewal;
 }
+
+const FREQUENCY_OPTIONS = [
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'annually', label: 'Annually' },
+] as const;
 
 export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormSheetProps) {
   const { user } = useAuth();
@@ -35,6 +48,7 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
   const [totalCost, setTotalCost] = useState('');
   const [monthlyAmount, setMonthlyAmount] = useState('');
   const [isMonthlyPayment, setIsMonthlyPayment] = useState(true);
+  const [frequency, setFrequency] = useState<'weekly' | 'monthly' | 'annually'>('annually');
   const [agreementStart, setAgreementStart] = useState<Date | undefined>();
   const [agreementEnd, setAgreementEnd] = useState<Date | undefined>();
   const [notes, setNotes] = useState('');
@@ -51,6 +65,7 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
       setTotalCost(renewal.total_cost?.toString() || '');
       setMonthlyAmount(renewal.monthly_amount?.toString() || '');
       setIsMonthlyPayment(renewal.is_monthly_payment);
+      setFrequency(renewal.frequency || 'annually');
       setAgreementStart(renewal.agreement_start ? new Date(renewal.agreement_start) : undefined);
       setAgreementEnd(renewal.agreement_end ? new Date(renewal.agreement_end) : undefined);
       setNotes(renewal.notes || '');
@@ -67,6 +82,7 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
     setTotalCost('');
     setMonthlyAmount('');
     setIsMonthlyPayment(true);
+    setFrequency('annually');
     setAgreementStart(undefined);
     setAgreementEnd(undefined);
     setNotes('');
@@ -186,6 +202,7 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
       total_cost: parseFloat(totalCost) || 0,
       monthly_amount: parseFloat(monthlyAmount) || 0,
       is_monthly_payment: isMonthlyPayment,
+      frequency,
       agreement_start: agreementStart ? format(agreementStart, 'yyyy-MM-dd') : null,
       agreement_end: agreementEnd ? format(agreementEnd, 'yyyy-MM-dd') : null,
       notes: notes.trim() || null,
@@ -351,12 +368,29 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
               </div>
             </div>
 
-            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-              <Label>Monthly payments?</Label>
-              <Switch
-                checked={isMonthlyPayment}
-                onCheckedChange={setIsMonthlyPayment}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                <Label>Monthly payments?</Label>
+                <Switch
+                  checked={isMonthlyPayment}
+                  onCheckedChange={setIsMonthlyPayment}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Payment Frequency</Label>
+                <Select value={frequency} onValueChange={(v) => setFrequency(v as 'weekly' | 'monthly' | 'annually')}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FREQUENCY_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

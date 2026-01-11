@@ -59,21 +59,43 @@ export default function Renewals() {
     return daysUntil >= 0 && daysUntil <= 30;
   }).length;
 
-  const getExpiryStatus = (endDate: string | null) => {
-    if (!endDate) return null;
-    const end = new Date(endDate);
-    const daysUntil = differenceInDays(end, new Date());
+  // Calculate next payment date based on start date and frequency
+  const getNextPaymentDate = (renewal: Renewal) => {
+    if (!renewal.agreement_start) return null;
     
-    if (isPast(end)) {
-      return { label: 'Expired', variant: 'destructive' as const };
+    const start = new Date(renewal.agreement_start);
+    const today = new Date();
+    const frequency = renewal.frequency || 'annually';
+    
+    let nextPayment = new Date(start);
+    
+    // Find the next payment date from start date
+    while (nextPayment < today) {
+      if (frequency === 'weekly') {
+        nextPayment.setDate(nextPayment.getDate() + 7);
+      } else if (frequency === 'monthly') {
+        nextPayment.setMonth(nextPayment.getMonth() + 1);
+      } else {
+        nextPayment.setFullYear(nextPayment.getFullYear() + 1);
+      }
     }
+    
+    return nextPayment;
+  };
+
+  const getPaymentStatus = (renewal: Renewal) => {
+    const nextPayment = getNextPaymentDate(renewal);
+    if (!nextPayment) return null;
+    
+    const daysUntil = differenceInDays(nextPayment, new Date());
+    
     if (daysUntil <= 7) {
-      return { label: `${daysUntil}d`, variant: 'destructive' as const };
+      return { label: `${daysUntil}d`, variant: 'destructive' as const, date: nextPayment };
     }
     if (daysUntil <= 30) {
-      return { label: `${daysUntil}d`, variant: 'secondary' as const };
+      return { label: `${daysUntil}d`, variant: 'secondary' as const, date: nextPayment };
     }
-    return { label: `${daysUntil}d`, variant: 'outline' as const };
+    return { label: `${daysUntil}d`, variant: 'outline' as const, date: nextPayment };
   };
 
   const getInitialIcon = (name: string) => name.charAt(0).toUpperCase();
@@ -162,11 +184,12 @@ export default function Renewals() {
         {sortedRenewals.length > 0 ? (
           <div className="space-y-2">
             {sortedRenewals.map((renewal) => {
-              const expiryStatus = getExpiryStatus(renewal.agreement_end);
+              const paymentStatus = getPaymentStatus(renewal);
               return (
                 <div
                   key={renewal.id}
-                  className="flex items-center justify-between py-3 border-b border-border last:border-0"
+                  className="flex items-center justify-between py-3 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 rounded transition-colors"
+                  onDoubleClick={() => { setEditingRenewal(renewal); setShowForm(true); }}
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0">
@@ -181,10 +204,10 @@ export default function Renewals() {
                             In Expenses
                           </Badge>
                         )}
-                        {expiryStatus && (
-                          <Badge variant={expiryStatus.variant} className="text-[10px] px-1.5 py-0">
+                        {paymentStatus && (
+                          <Badge variant={paymentStatus.variant} className="text-[10px] px-1.5 py-0">
                             <Calendar className="h-2.5 w-2.5 mr-0.5" />
-                            {expiryStatus.label}
+                            Next: {paymentStatus.label}
                           </Badge>
                         )}
                       </div>
@@ -227,17 +250,6 @@ export default function Renewals() {
                       </Button>
                     )}
                     
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7"
-                      onClick={() => {
-                        setEditingRenewal(renewal);
-                        setShowForm(true);
-                      }}
-                    >
-                      <Edit2 className="h-3 w-3" />
-                    </Button>
                     <Button
                       size="icon"
                       variant="ghost"

@@ -314,6 +314,7 @@ export type Database = {
           created_at: string
           file_name: string | null
           file_url: string | null
+          frequency: string
           id: string
           is_monthly_payment: boolean
           linked_expense_id: string | null
@@ -333,6 +334,7 @@ export type Database = {
           created_at?: string
           file_name?: string | null
           file_url?: string | null
+          frequency?: string
           id?: string
           is_monthly_payment?: boolean
           linked_expense_id?: string | null
@@ -352,6 +354,7 @@ export type Database = {
           created_at?: string
           file_name?: string | null
           file_url?: string | null
+          frequency?: string
           id?: string
           is_monthly_payment?: boolean
           linked_expense_id?: string | null
