@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          action: string
+          changes: Json | null
+          created_at: string
+          entity_id: string
+          entity_name: string | null
+          entity_type: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          changes?: Json | null
+          created_at?: string
+          entity_id: string
+          entity_name?: string | null
+          entity_type: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          changes?: Json | null
+          created_at?: string
+          entity_id?: string
+          entity_name?: string | null
+          entity_type?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       debt_payments: {
         Row: {
           amount: number
@@ -492,6 +525,44 @@ export type Database = {
           },
         ]
       }
+      task_delegation_responses: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          responded_at: string | null
+          response: string | null
+          task_id: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          responded_at?: string | null
+          response?: string | null
+          task_id: string
+          token: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          responded_at?: string | null
+          response?: string | null
+          task_id?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_delegation_responses_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_history: {
         Row: {
           action: string
@@ -564,7 +635,9 @@ export type Database = {
           auto_complete: boolean
           completed_at: string | null
           created_at: string
+          delegation_responded_at: string | null
           delegation_status: string | null
+          delegation_token: string | null
           description: string | null
           due_date: string | null
           due_time: string | null
@@ -581,7 +654,9 @@ export type Database = {
           auto_complete?: boolean
           completed_at?: string | null
           created_at?: string
+          delegation_responded_at?: string | null
           delegation_status?: string | null
+          delegation_token?: string | null
           description?: string | null
           due_date?: string | null
           due_time?: string | null
@@ -598,7 +673,9 @@ export type Database = {
           auto_complete?: boolean
           completed_at?: string | null
           created_at?: string
+          delegation_responded_at?: string | null
           delegation_status?: string | null
+          delegation_token?: string | null
           description?: string | null
           due_date?: string | null
           due_time?: string | null
