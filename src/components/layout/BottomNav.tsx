@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Wallet, CheckSquare, FileText, ChevronUp, CreditCard, PiggyBank, ArrowLeftRight } from 'lucide-react';
+import { Home, Wallet, CheckSquare, ChevronUp, CreditCard, PiggyBank, ArrowLeftRight, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
@@ -8,13 +8,14 @@ const financeSubItems = [
   { to: '/debts', icon: CreditCard, label: 'Debts' },
   { to: '/savings', icon: PiggyBank, label: 'Savings' },
   { to: '/cashflow', icon: ArrowLeftRight, label: 'Cashflow' },
+  { to: '/renewals', icon: FileText, label: 'Renewals' },
 ];
 
 export function BottomNav() {
   const location = useLocation();
   const [financeOpen, setFinanceOpen] = useState(false);
   
-  const isFinanceActive = ['/debts', '/savings', '/cashflow'].some(
+  const isFinanceActive = ['/debts', '/savings', '/cashflow', '/renewals'].some(
     path => location.pathname === path || location.pathname.startsWith(path + '/')
   );
 
@@ -95,20 +96,6 @@ export function BottomNav() {
         >
           <CheckSquare className="h-5 w-5" strokeWidth={location.pathname.startsWith('/todo') ? 2.5 : 2} />
           <span className="text-[10px] font-medium">To Do</span>
-        </Link>
-
-        {/* Renewals */}
-        <Link
-          to="/renewals"
-          className={cn(
-            "flex flex-col items-center justify-center gap-1 px-3 py-2 tap-target transition-colors",
-            location.pathname === '/renewals' || location.pathname.startsWith('/renewals/')
-              ? "text-nav-active" 
-              : "text-nav-foreground hover:text-foreground"
-          )}
-        >
-          <FileText className="h-5 w-5" strokeWidth={location.pathname.startsWith('/renewals') ? 2.5 : 2} />
-          <span className="text-[10px] font-medium">Renewals</span>
         </Link>
       </div>
     </nav>

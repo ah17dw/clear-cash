@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Calendar, Clock, Flag, Repeat, CheckCircle2, History, AlertTriangle } from 'lucide-react';
+import { Plus, Calendar, Clock, Flag, Repeat, CheckCircle2, History, AlertTriangle, CalendarDays } from 'lucide-react';
 import { format, isToday, isThisWeek, isThisMonth, parseISO, isPast, differenceInDays } from 'date-fns';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -9,12 +9,14 @@ import { useTasks, useUpdateTask } from '@/hooks/useTasks';
 import { useAddTaskHistory } from '@/hooks/useTaskHistory';
 import { TaskFormSheet } from '@/components/todo/TaskFormSheet';
 import { TaskHistorySheet } from '@/components/todo/TaskHistorySheet';
+import { FinanceCalendar } from '@/components/finance/FinanceCalendar';
 import { cn } from '@/lib/utils';
 
 export default function Todo() {
   const { data: tasks, isLoading } = useTasks();
   const [showForm, setShowForm] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
   const [editingTask, setEditingTask] = useState<any>(null);
   const [filter, setFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const updateTask = useUpdateTask();
@@ -145,6 +147,9 @@ export default function Todo() {
         title="To Do" 
         rightContent={
           <div className="flex items-center gap-2">
+            <Button size="icon" variant="outline" onClick={() => setShowCalendar(!showCalendar)}>
+              <CalendarDays className="h-4 w-4" />
+            </Button>
             <Button size="icon" variant="outline" onClick={() => setShowHistory(true)}>
               <History className="h-4 w-4" />
             </Button>
@@ -155,6 +160,13 @@ export default function Todo() {
           </div>
         }
       />
+
+      {/* Calendar View */}
+      {showCalendar && (
+        <div className="mb-4">
+          <FinanceCalendar tasks={tasks} showTasks={true} />
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-3 mb-4">
