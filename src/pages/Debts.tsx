@@ -228,9 +228,8 @@ export default function Debts() {
             const paidOff = startingBalance - adjustedBalance;
             const progress = startingBalance > 0 ? Math.min(100, Math.max(0, (paidOff / startingBalance) * 100)) : 0;
             
-            // Calculate percentage of total debt for gradient
+            // Calculate percentage of total debt for progress bar
             const debtPercentage = totalDebt > 0 ? (adjustedBalance / totalDebt) * 100 : 0;
-            const gradientIntensity = Math.min(debtPercentage, 100);
             
             const getNextPaymentDate = () => {
               if (!debt.payment_day) return null;
@@ -253,12 +252,18 @@ export default function Debts() {
               >
                 <button
                   onClick={() => navigate(`/debts/${debt.id}`)}
-                  className="w-full finance-card flex flex-col gap-2 list-item-interactive animate-fade-in overflow-hidden text-left"
-                  style={{ 
-                    animationDelay: `${index * 30}ms`,
-                    background: `linear-gradient(90deg, hsl(0 72% 51% / ${gradientIntensity * 0.15}) 0%, hsl(var(--card)) ${Math.max(gradientIntensity, 20)}%)`
-                  }}
+                  className="w-full finance-card flex gap-2 list-item-interactive animate-fade-in overflow-hidden text-left"
+                  style={{ animationDelay: `${index * 30}ms` }}
                 >
+                  {/* Vertical progress bar showing % of total debt */}
+                  <div className="w-1 self-stretch bg-muted rounded-full overflow-hidden flex-shrink-0">
+                    <div 
+                      className="w-full bg-debt rounded-full transition-all duration-300"
+                      style={{ height: `${Math.min(debtPercentage, 100)}%` }}
+                    />
+                  </div>
+                  
+                  <div className="flex-1 flex flex-col gap-2">
                   <div className="flex items-center gap-3">
                     <div className="flex-1 text-left min-w-0">
                       <div className="flex items-center gap-2">
@@ -339,6 +344,7 @@ export default function Debts() {
                       ) : (
                         <p className="text-[10px] text-muted-foreground">No payment set</p>
                       )}
+                    </div>
                     </div>
                   </div>
                 </button>
