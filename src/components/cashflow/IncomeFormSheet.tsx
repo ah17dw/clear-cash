@@ -19,10 +19,11 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useCreateIncomeSource, useUpdateIncomeSource } from '@/hooks/useFinanceData';
 import { IncomeSource } from '@/types/finance';
+import { formatCurrency } from '@/lib/format';
 
 const incomeSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  monthly_amount: z.coerce.number().min(0),
+  amount: z.coerce.number().min(0),
 });
 
 type IncomeFormData = z.infer<typeof incomeSchema>;
@@ -41,25 +42,36 @@ export function IncomeFormSheet({ open, onOpenChange, income }: IncomeFormSheetP
   const [isTemporary, setIsTemporary] = useState(false);
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
+  const [isMonthly, setIsMonthly] = useState(false);
 
   const {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<IncomeFormData>({
     resolver: zodResolver(incomeSchema),
     defaultValues: {
       name: '',
-      monthly_amount: 0,
+      amount: 0,
     },
   });
 
+  const currentAmount = watch('amount') || 0;
+
   useEffect(() => {
     if (income) {
+      // Check if income has a frequency field, default to monthly for backwards compatibility
+      const incomeIsMonthly = (income as any).frequency === 'monthly' || !(income as any).frequency;
+      setIsMonthly(incomeIsMonthly);
       reset({
         name: income.name,
-        monthly_amount: Number(income.monthly_amount),
+        // Display as annual amount in the form (convert monthly to annual)
+        amount: incomeIsMonthly 
+          ? Number(income.monthly_amount) * 12 
+          : Number(income.monthly_amount),
       });
       setStartDate(income.start_date ? new Date(income.start_date) : undefined);
       setEndDate(income.end_date ? new Date(income.end_date) : undefined);
@@ -67,18 +79,22 @@ export function IncomeFormSheet({ open, onOpenChange, income }: IncomeFormSheetP
     } else {
       reset({
         name: '',
-        monthly_amount: 0,
+        amount: 0,
       });
       setStartDate(undefined);
       setEndDate(undefined);
       setIsTemporary(false);
+      setIsMonthly(false);
     }
   }, [income, reset, open]);
 
   const onSubmit = async (data: IncomeFormData) => {
+    // Convert to monthly amount for storage
+    const monthlyAmount = isMonthly ? data.amount : data.amount / 12;
+    
     const payload = {
       name: data.name,
-      monthly_amount: data.monthly_amount,
+      monthly_amount: monthlyAmount,
       start_date: isTemporary && startDate ? format(startDate, 'yyyy-MM-dd') : null,
       end_date: isTemporary && endDate ? format(endDate, 'yyyy-MM-dd') : null,
     };
@@ -89,6 +105,9 @@ export function IncomeFormSheet({ open, onOpenChange, income }: IncomeFormSheetP
     }
     onOpenChange(false);
   };
+
+  // Calculate the displayed monthly equivalent
+  const monthlyEquivalent = isMonthly ? currentAmount : currentAmount / 12;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -105,12 +124,43 @@ export function IncomeFormSheet({ open, onOpenChange, income }: IncomeFormSheetP
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="monthly_amount">Monthly Amount *</Label>
+            <Label htmlFor="amount">
+              {isMonthly ? 'Monthly Amount *' : 'Annual Amount *'}
+            </Label>
             <Input
-              id="monthly_amount"
+              id="amount"
               type="number"
               step="0.01"
-              {...register('monthly_amount')}
+              {...register('amount')}
+            />
+            {!isMonthly && currentAmount > 0 && (
+              <p className="text-xs text-muted-foreground">
+                = {formatCurrency(monthlyEquivalent)}/month
+              </p>
+            )}
+          </div>
+
+          {/* Monthly Toggle */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+            <div>
+              <Label>Monthly income?</Label>
+              <p className="text-xs text-muted-foreground">
+                Toggle if this is received monthly
+              </p>
+            </div>
+            <Switch
+              checked={isMonthly}
+              onCheckedChange={(checked) => {
+                // Convert the amount when toggling
+                if (checked && currentAmount > 0) {
+                  // Converting from annual to monthly: divide by 12
+                  setValue('amount', Number((currentAmount / 12).toFixed(2)));
+                } else if (!checked && currentAmount > 0) {
+                  // Converting from monthly to annual: multiply by 12
+                  setValue('amount', Number((currentAmount * 12).toFixed(2)));
+                }
+                setIsMonthly(checked);
+              }}
             />
           </div>
 

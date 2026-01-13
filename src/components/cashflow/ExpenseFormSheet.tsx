@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Upload, Sparkles, Loader2 } from 'lucide-react';
+import { CalendarIcon, Sparkles, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import {
@@ -28,12 +28,12 @@ import { useCreateExpenseItem, useUpdateExpenseItem } from '@/hooks/useFinanceDa
 import { ExpenseItem, EXPENSE_CATEGORIES } from '@/types/finance';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/lib/format';
 
 const expenseSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  monthly_amount: z.coerce.number().min(0),
+  amount: z.coerce.number().min(0),
   category: z.string().optional(),
-  frequency: z.enum(['monthly', 'annual']).default('monthly'),
 });
 
 type ExpenseFormData = z.infer<typeof expenseSchema>;
@@ -52,7 +52,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
   const [isTemporary, setIsTemporary] = useState(false);
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
-  const [frequency, setFrequency] = useState<'monthly' | 'annual'>('monthly');
+  const [isMonthly, setIsMonthly] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -68,35 +68,38 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
     resolver: zodResolver(expenseSchema),
     defaultValues: {
       name: '',
-      monthly_amount: 0,
+      amount: 0,
       category: 'other',
-      frequency: 'monthly',
     },
   });
 
+  const currentAmount = watch('amount') || 0;
+
   useEffect(() => {
     if (expense) {
+      const expenseIsMonthly = expense.frequency === 'monthly';
+      setIsMonthly(expenseIsMonthly);
       reset({
         name: expense.name,
-        monthly_amount: Number(expense.monthly_amount),
+        // Display as annual amount in the form
+        amount: expenseIsMonthly 
+          ? Number(expense.monthly_amount) * 12 
+          : Number(expense.monthly_amount),
         category: expense.category ?? 'other',
-        frequency: expense.frequency ?? 'monthly',
       });
       setStartDate(expense.start_date ? new Date(expense.start_date) : undefined);
       setEndDate(expense.end_date ? new Date(expense.end_date) : undefined);
       setIsTemporary(!!(expense.start_date || expense.end_date));
-      setFrequency(expense.frequency ?? 'monthly');
     } else {
       reset({
         name: '',
-        monthly_amount: 0,
+        amount: 0,
         category: 'other',
-        frequency: 'monthly',
       });
       setStartDate(undefined);
       setEndDate(undefined);
       setIsTemporary(false);
-      setFrequency('monthly');
+      setIsMonthly(false);
       setUploadedFile(null);
     }
   }, [expense, reset, open]);
@@ -109,7 +112,6 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
     setIsUploading(true);
     
     try {
-      // Extract text from the file using AI
       await extractFromFile(file);
     } catch (error) {
       console.error('File processing error:', error);
@@ -124,12 +126,10 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
     setIsExtracting(true);
     
     try {
-      // Read file as base64 for AI processing
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
           const result = reader.result as string;
-          // Extract base64 data after the comma
           const base64Data = result.split(',')[1];
           resolve(base64Data);
         };
@@ -137,7 +137,6 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
         reader.readAsDataURL(file);
       });
 
-      // Call extract-expense edge function with file content
       const { data, error } = await supabase.functions.invoke('extract-expense', {
         body: { 
           fileBase64: base64,
@@ -153,12 +152,10 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
       if (extracted) {
         if (extracted.name) setValue('name', extracted.name);
         if (extracted.monthly_amount) {
-          // If user has selected annual, keep the extracted amount as annual
-          // The AI extracts the amount shown in the document regardless of frequency
-          setValue('monthly_amount', extracted.monthly_amount);
+          // AI returns monthly amount, convert to annual for our form
+          setValue('amount', extracted.monthly_amount * 12);
         }
         if (extracted.category) setValue('category', extracted.category);
-        // Don't override the user's frequency selection
         toast.success('Information extracted from file!');
       }
     } catch (error) {
@@ -170,11 +167,15 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
   };
 
   const onSubmit = async (data: ExpenseFormData) => {
+    // Convert to monthly amount for storage
+    const monthlyAmount = isMonthly ? data.amount : data.amount / 12;
+    const frequency: 'monthly' | 'annual' = isMonthly ? 'monthly' : 'annual';
+    
     const payload = {
       name: data.name,
-      monthly_amount: data.monthly_amount,
+      monthly_amount: monthlyAmount,
       category: data.category || null,
-      frequency: frequency,
+      frequency,
       start_date: isTemporary && startDate ? format(startDate, 'yyyy-MM-dd') : null,
       end_date: isTemporary && endDate ? format(endDate, 'yyyy-MM-dd') : null,
     };
@@ -186,6 +187,9 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
     }
     onOpenChange(false);
   };
+
+  // Calculate the displayed monthly equivalent
+  const monthlyEquivalent = isMonthly ? currentAmount : currentAmount / 12;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -232,38 +236,26 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
 
           <div className="space-y-2">
             <Label htmlFor="name">Name *</Label>
-            <Input id="name" {...register('name')} placeholder="e.g. Netflix" />
+            <Input id="name" {...register('name')} placeholder="e.g. Car Insurance" />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-          </div>
-
-          {/* Frequency Selection */}
-          <div className="space-y-2">
-            <Label>Frequency</Label>
-            <Select
-              value={frequency}
-              onValueChange={(v: 'monthly' | 'annual') => setFrequency(v)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="monthly">Monthly</SelectItem>
-                <SelectItem value="annual">Annual</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="monthly_amount">
-                {frequency === 'annual' ? 'Annual Amount *' : 'Monthly Amount *'}
+              <Label htmlFor="amount">
+                {isMonthly ? 'Monthly Amount *' : 'Annual Amount *'}
               </Label>
               <Input
-                id="monthly_amount"
+                id="amount"
                 type="number"
                 step="0.01"
-                {...register('monthly_amount')}
+                {...register('amount')}
               />
+              {!isMonthly && currentAmount > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  = {formatCurrency(monthlyEquivalent)}/month
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Category</Label>
@@ -283,6 +275,30 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Monthly Toggle */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+            <div>
+              <Label>Monthly payment?</Label>
+              <p className="text-xs text-muted-foreground">
+                Toggle if this is paid monthly
+              </p>
+            </div>
+            <Switch
+              checked={isMonthly}
+              onCheckedChange={(checked) => {
+                // Convert the amount when toggling
+                if (checked && currentAmount > 0) {
+                  // Converting from annual to monthly: divide by 12
+                  setValue('amount', Number((currentAmount / 12).toFixed(2)));
+                } else if (!checked && currentAmount > 0) {
+                  // Converting from monthly to annual: multiply by 12
+                  setValue('amount', Number((currentAmount * 12).toFixed(2)));
+                }
+                setIsMonthly(checked);
+              }}
+            />
           </div>
 
           {/* Temporary Toggle */}
