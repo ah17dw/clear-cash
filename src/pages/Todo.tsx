@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Calendar, Clock, Flag, Repeat, CheckCircle2, History, AlertTriangle, CalendarDays } from 'lucide-react';
+import { Plus, Calendar, Clock, Flag, Repeat, CheckCircle2, History, AlertTriangle, CalendarDays, Check, X, HelpCircle } from 'lucide-react';
 import { format, isToday, isThisWeek, isThisMonth, parseISO, isPast, differenceInDays } from 'date-fns';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { useTasks, useUpdateTask } from '@/hooks/useTasks';
 import { useAddTaskHistory } from '@/hooks/useTaskHistory';
 import { TaskFormSheet } from '@/components/todo/TaskFormSheet';
 import { TaskHistorySheet } from '@/components/todo/TaskHistorySheet';
-import { FinanceCalendar } from '@/components/finance/FinanceCalendar';
+import { TaskCalendar } from '@/components/todo/TaskCalendar';
 import { cn } from '@/lib/utils';
 
 export default function Todo() {
@@ -164,7 +164,7 @@ export default function Todo() {
       {/* Calendar View */}
       {showCalendar && (
         <div className="mb-4">
-          <FinanceCalendar tasks={tasks} showTasks={true} />
+          <TaskCalendar tasks={tasks} />
         </div>
       )}
 
@@ -257,6 +257,25 @@ export default function Todo() {
                     {getRepeatBadge(task.repeat_type)}
                     {task.auto_complete && (
                       <Badge variant="outline" className="text-xs">Auto</Badge>
+                    )}
+                    {/* Delegation status indicator */}
+                    {task.delegation_status === 'pending' && (
+                      <Badge variant="outline" className="text-xs text-amber-500 border-amber-500">
+                        <HelpCircle className="h-3 w-3 mr-1" />
+                        Pending
+                      </Badge>
+                    )}
+                    {task.delegation_status === 'accepted' && (
+                      <Badge variant="outline" className="text-xs text-savings border-savings">
+                        <Check className="h-3 w-3 mr-1" />
+                        Accepted
+                      </Badge>
+                    )}
+                    {task.delegation_status === 'rejected' && (
+                      <Badge variant="outline" className="text-xs text-debt border-debt">
+                        <X className="h-3 w-3 mr-1" />
+                        Declined
+                      </Badge>
                     )}
                   </div>
                 </div>

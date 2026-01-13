@@ -152,7 +152,6 @@ export default function Debts() {
               ? Number(debt.planned_payment) 
               : Number(debt.minimum_payment) || 0;
             
-            // Calculate adjusted balance (assumes payments made after due date)
             const { adjustedBalance, paymentsMade } = getAdjustedBalance(
               Number(debt.balance),
               debt.payment_day,
@@ -163,7 +162,10 @@ export default function Debts() {
             const paidOff = startingBalance - adjustedBalance;
             const progress = startingBalance > 0 ? Math.min(100, Math.max(0, (paidOff / startingBalance) * 100)) : 0;
             
-            // Calculate next payment date based on payment_day
+            // Calculate percentage of total debt for gradient
+            const debtPercentage = totalDebt > 0 ? (adjustedBalance / totalDebt) * 100 : 0;
+            const gradientIntensity = Math.min(debtPercentage, 100);
+            
             const getNextPaymentDate = () => {
               if (!debt.payment_day) return null;
               const today = new Date();
@@ -180,8 +182,11 @@ export default function Debts() {
               <button
                 key={debt.id}
                 onClick={() => navigate(`/debts/${debt.id}`)}
-                className="w-full finance-card flex flex-col gap-2 list-item-interactive animate-fade-in"
-                style={{ animationDelay: `${index * 30}ms` }}
+                className="w-full finance-card flex flex-col gap-2 list-item-interactive animate-fade-in overflow-hidden"
+                style={{ 
+                  animationDelay: `${index * 30}ms`,
+                  background: `linear-gradient(90deg, hsl(0 72% 51% / ${gradientIntensity * 0.15}) 0%, hsl(var(--card)) ${Math.max(gradientIntensity, 20)}%)`
+                }}
               >
                 <div className="flex items-center gap-3">
                   <div className="flex-1 text-left min-w-0">
