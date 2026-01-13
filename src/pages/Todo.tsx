@@ -1,51 +1,112 @@
-import { useState } from 'react';
-import { Plus, Calendar, Clock, Flag, Repeat, CheckCircle2, History, AlertTriangle, CalendarDays, Check, X, HelpCircle } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { 
+  Plus, Calendar, Clock, Flag, Repeat, CheckCircle2, History, 
+  AlertTriangle, CalendarDays, Check, X, HelpCircle, Users, 
+  LayoutGrid, List, Filter, User, ChevronRight
+} from 'lucide-react';
 import { format, isToday, isThisWeek, isThisMonth, parseISO, isPast, differenceInDays, addDays, addWeeks, addMonths } from 'date-fns';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useTasks, useUpdateTask, useCreateTask } from '@/hooks/useTasks';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useTasks, useUpdateTask, useCreateTask, useTaskTags, Task } from '@/hooks/useTasks';
 import { useAddTaskHistory } from '@/hooks/useTaskHistory';
 import { TaskFormSheet } from '@/components/todo/TaskFormSheet';
 import { TaskHistorySheet } from '@/components/todo/TaskHistorySheet';
 import { TaskCalendar } from '@/components/todo/TaskCalendar';
 import { cn } from '@/lib/utils';
 
+// Household members - this could come from a database/settings in the future
+const HOUSEHOLD_MEMBERS = [
+  { email: 'alex@hayesalex.com', name: 'Alex', color: 'bg-blue-500' },
+  { email: 'bill@example.com', name: 'Bill', color: 'bg-green-500' },
+  { email: 'nan@example.com', name: 'Nan', color: 'bg-purple-500' },
+];
+
+type ViewMode = 'list' | 'board';
+type FilterType = 'all' | 'today' | 'week' | 'month' | 'overdue';
+type AssigneeFilter = 'all' | string;
+
+interface TaskWithTags extends Task {
+  assignees?: { email: string; name: string; color: string }[];
+}
+
 export default function Todo() {
   const { data: tasks, isLoading } = useTasks();
   const [showForm, setShowForm] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
-  const [editingTask, setEditingTask] = useState<any>(null);
-  const [filter, setFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [filter, setFilter] = useState<FilterType>('all');
+  const [assigneeFilter, setAssigneeFilter] = useState<AssigneeFilter>('all');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const addHistory = useAddTaskHistory();
 
-  const filteredTasks = tasks?.filter(task => {
-    if (filter === 'all') return true;
-    if (!task.due_date) return false;
-    const dueDate = parseISO(task.due_date);
-    if (filter === 'today') return isToday(dueDate);
-    if (filter === 'week') return isThisWeek(dueDate);
-    if (filter === 'month') return isThisMonth(dueDate);
-    return true;
-  }) ?? [];
+  // Enrich tasks with assignee info
+  const enrichedTasks = useMemo(() => {
+    return tasks?.map(task => {
+      const assignees = HOUSEHOLD_MEMBERS.filter(member => 
+        // Check if task has this member tagged (simplified - in real app would query task_tags)
+        task.delegation_status !== 'none'
+      );
+      return { ...task, assignees };
+    }) ?? [];
+  }, [tasks]);
 
-  const incompleteTasks = filteredTasks.filter(t => !t.is_completed);
-  const completedTasks = filteredTasks.filter(t => t.is_completed);
+  const filteredTasks = useMemo(() => {
+    let result = enrichedTasks;
 
-  const dailyCount = tasks?.filter(t => t.repeat_type === 'daily' && !t.is_completed).length ?? 0;
-  const weeklyCount = tasks?.filter(t => t.repeat_type === 'weekly' && !t.is_completed).length ?? 0;
-  const monthlyCount = tasks?.filter(t => t.repeat_type === 'monthly' && !t.is_completed).length ?? 0;
+    // Date filter
+    if (filter !== 'all') {
+      result = result.filter(task => {
+        if (!task.due_date) return false;
+        const dueDate = parseISO(task.due_date);
+        if (filter === 'today') return isToday(dueDate);
+        if (filter === 'week') return isThisWeek(dueDate);
+        if (filter === 'month') return isThisMonth(dueDate);
+        if (filter === 'overdue') return isPast(dueDate) && !isToday(dueDate) && !task.is_completed;
+        return true;
+      });
+    }
 
-  const handleToggleComplete = async (task: any) => {
+    return result;
+  }, [enrichedTasks, filter, assigneeFilter]);
+
+  // Group tasks by status for board view
+  const tasksByStatus = useMemo(() => {
+    const pending = filteredTasks.filter(t => !t.is_completed && t.delegation_status === 'pending');
+    const todo = filteredTasks.filter(t => !t.is_completed && t.delegation_status !== 'pending');
+    const done = filteredTasks.filter(t => t.is_completed);
+    return { pending, todo, done };
+  }, [filteredTasks]);
+
+  // Stats
+  const stats = useMemo(() => {
+    const all = tasks ?? [];
+    return {
+      total: all.length,
+      overdue: all.filter(t => t.due_date && isPast(parseISO(t.due_date)) && !isToday(parseISO(t.due_date)) && !t.is_completed).length,
+      pending: all.filter(t => t.delegation_status === 'pending').length,
+      todayDue: all.filter(t => t.due_date && isToday(parseISO(t.due_date)) && !t.is_completed).length,
+      completed: all.filter(t => t.is_completed).length,
+    };
+  }, [tasks]);
+
+  const handleToggleComplete = async (task: Task) => {
     const isCompleting = !task.is_completed;
     const isOnTime = task.due_date ? !isPast(parseISO(task.due_date)) : true;
 
-    // For repeating tasks: when you complete it, we create the next occurrence as a NEW task.
-    // This keeps each occurrence unique (like separate calendar instances), instead of completing the whole series.
     if (isCompleting && task.due_date && task.repeat_type && task.repeat_type !== 'none') {
       const base = parseISO(task.due_date);
       let next = base;
@@ -68,7 +129,6 @@ export default function Todo() {
         completed_at: null,
       });
 
-      // Mark THIS occurrence complete and turn it into a non-repeating historic item.
       await updateTask.mutateAsync({
         id: task.id,
         updates: {
@@ -113,7 +173,16 @@ export default function Todo() {
     }
   };
 
-  const getTaskStatus = (task: any) => {
+  const getPriorityBg = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'bg-debt/10 border-debt/30';
+      case 'medium': return 'bg-amber-500/10 border-amber-500/30';
+      case 'low': return 'bg-savings/10 border-savings/30';
+      default: return 'bg-muted';
+    }
+  };
+
+  const getTaskStatus = (task: Task) => {
     if (task.is_completed) return 'completed';
     if (!task.due_date) return 'normal';
     
@@ -125,59 +194,147 @@ export default function Todo() {
     return 'normal';
   };
 
-  const getStatusBadge = (task: any) => {
-    const status = getTaskStatus(task);
+  const getDelegationIcon = (status: string) => {
     switch (status) {
-      case 'overdue':
-        return (
-          <Badge variant="destructive" className="text-xs">
-            <AlertTriangle className="h-3 w-3 mr-1" />
-            Overdue
-          </Badge>
-        );
-      case 'upcoming':
-        return (
-          <Badge variant="outline" className="text-xs border-amber-500 text-amber-500">
-            <Clock className="h-3 w-3 mr-1" />
-            Due soon
-          </Badge>
-        );
-      default:
-        return null;
+      case 'pending': return <HelpCircle className="h-3 w-3 text-amber-500" />;
+      case 'accepted': return <Check className="h-3 w-3 text-savings" />;
+      case 'rejected': return <X className="h-3 w-3 text-debt" />;
+      default: return null;
     }
   };
 
-  const getTaskCardClass = (task: any) => {
+  const TaskCard = ({ task, compact = false }: { task: TaskWithTags; compact?: boolean }) => {
     const status = getTaskStatus(task);
-    switch (status) {
-      case 'overdue':
-        return 'border-l-4 border-l-debt bg-debt/5';
-      case 'upcoming':
-        return 'border-l-4 border-l-amber-500 bg-amber-500/5';
-      default:
-        return '';
-    }
-  };
+    const isOverdue = status === 'overdue';
+    const isUpcoming = status === 'upcoming';
 
-  const getRepeatBadge = (repeatType: string | null) => {
-    if (!repeatType || repeatType === 'none') return null;
-    const labels: Record<string, string> = {
-      daily: 'Daily',
-      weekly: 'Weekly',
-      monthly: 'Monthly',
-    };
     return (
-      <Badge variant="secondary" className="text-xs">
-        <Repeat className="h-3 w-3 mr-1" />
-        {labels[repeatType]}
-      </Badge>
+      <div
+        className={cn(
+          "group relative p-3 rounded-lg border transition-all cursor-pointer",
+          "hover:shadow-md hover:border-primary/30",
+          task.is_completed && "opacity-50",
+          isOverdue && "border-l-4 border-l-debt bg-debt/5",
+          isUpcoming && !isOverdue && "border-l-4 border-l-amber-500 bg-amber-500/5",
+          !isOverdue && !isUpcoming && "bg-card"
+        )}
+        onClick={() => {
+          setEditingTask(task);
+          setShowForm(true);
+        }}
+      >
+        <div className="flex items-start gap-3">
+          <Checkbox
+            checked={task.is_completed}
+            onCheckedChange={() => handleToggleComplete(task)}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-0.5"
+          />
+          
+          <div className="flex-1 min-w-0">
+            {/* Title Row */}
+            <div className="flex items-center gap-2 mb-1">
+              <span className={cn(
+                "inline-flex items-center justify-center w-5 h-5 rounded text-xs font-bold",
+                getPriorityBg(task.priority),
+                getPriorityColor(task.priority)
+              )}>
+                {task.priority.charAt(0).toUpperCase()}
+              </span>
+              <p className={cn(
+                "font-medium truncate flex-1",
+                task.is_completed && "line-through text-muted-foreground"
+              )}>
+                {task.title}
+              </p>
+              {task.delegation_status !== 'none' && (
+                <div className="flex items-center">
+                  {getDelegationIcon(task.delegation_status)}
+                </div>
+              )}
+            </div>
+
+            {/* Description */}
+            {!compact && task.description && (
+              <p className="text-sm text-muted-foreground truncate mb-2">
+                {task.description}
+              </p>
+            )}
+
+            {/* Meta Row */}
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              {task.due_date && (
+                <span className={cn(
+                  "flex items-center gap-1 px-1.5 py-0.5 rounded",
+                  isOverdue ? "bg-debt/20 text-debt font-medium" : "text-muted-foreground"
+                )}>
+                  <Calendar className="h-3 w-3" />
+                  {isToday(parseISO(task.due_date)) ? 'Today' : format(parseISO(task.due_date), 'MMM d')}
+                </span>
+              )}
+              {task.due_time && (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  {task.due_time.slice(0, 5)}
+                </span>
+              )}
+              {task.repeat_type && task.repeat_type !== 'none' && (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <Repeat className="h-3 w-3" />
+                  {task.repeat_type}
+                </span>
+              )}
+            </div>
+
+            {/* Assignee Avatars */}
+            {task.delegation_status !== 'none' && (
+              <div className="flex items-center gap-1 mt-2">
+                <Avatar className="h-5 w-5">
+                  <AvatarFallback className="text-[10px] bg-primary/20">
+                    <User className="h-3 w-3" />
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-xs text-muted-foreground">
+                  {task.delegation_status === 'pending' && 'Awaiting response'}
+                  {task.delegation_status === 'accepted' && 'Accepted'}
+                  {task.delegation_status === 'rejected' && 'Declined'}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
+      </div>
     );
   };
+
+  const BoardColumn = ({ title, tasks, icon, color }: { title: string; tasks: TaskWithTags[]; icon: React.ReactNode; color: string }) => (
+    <div className="flex-1 min-w-[280px]">
+      <div className={cn("flex items-center gap-2 mb-3 p-2 rounded-lg", color)}>
+        {icon}
+        <span className="font-semibold text-sm">{title}</span>
+        <Badge variant="secondary" className="ml-auto text-xs">
+          {tasks.length}
+        </Badge>
+      </div>
+      <div className="space-y-2">
+        {tasks.map(task => (
+          <TaskCard key={task.id} task={task} compact />
+        ))}
+        {tasks.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground text-sm border-2 border-dashed rounded-lg">
+            No tasks
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   if (isLoading) {
     return (
       <div className="page-container">
-        <PageHeader title="To Do" />
+        <PageHeader title="Tasks" />
         <div className="flex items-center justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
@@ -188,7 +345,7 @@ export default function Todo() {
   return (
     <div className="page-container">
       <PageHeader 
-        title="To Do" 
+        title="Tasks" 
         rightContent={
           <div className="flex items-center gap-2">
             <Button size="icon" variant="outline" onClick={() => setShowCalendar(!showCalendar)}>
@@ -212,147 +369,178 @@ export default function Todo() {
         </div>
       )}
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="finance-card text-center p-3">
-          <p className="text-2xl font-bold">{dailyCount}</p>
-          <p className="text-xs text-muted-foreground">Daily</p>
-        </div>
-        <div className="finance-card text-center p-3">
-          <p className="text-2xl font-bold">{weeklyCount}</p>
-          <p className="text-xs text-muted-foreground">Weekly</p>
-        </div>
-        <div className="finance-card text-center p-3">
-          <p className="text-2xl font-bold">{monthlyCount}</p>
-          <p className="text-xs text-muted-foreground">Monthly</p>
-        </div>
-      </div>
-
-      {/* Filter */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-        {(['all', 'today', 'week', 'month'] as const).map(f => (
-          <Button
-            key={f}
-            variant={filter === f ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter(f)}
-            className="whitespace-nowrap"
-          >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
-          </Button>
-        ))}
-      </div>
-
-      {/* Tasks List */}
-      {incompleteTasks.length === 0 && completedTasks.length === 0 ? (
-        <div className="finance-card text-center py-8">
-          <CheckCircle2 className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-          <p className="text-muted-foreground">No tasks yet</p>
-          <Button variant="outline" className="mt-4" onClick={() => setShowForm(true)}>
-            Add your first task
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {incompleteTasks.map(task => (
-            <div
-              key={task.id}
-              className={cn(
-                "finance-card p-3 cursor-pointer hover:bg-muted/50 transition-colors",
-                getTaskCardClass(task)
-              )}
-              onClick={() => {
-                setEditingTask(task);
-                setShowForm(true);
-              }}
-            >
-              <div className="flex items-start gap-3">
-                <Checkbox
-                  checked={task.is_completed}
-                  onCheckedChange={() => handleToggleComplete(task)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="mt-0.5"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Flag className={cn("h-3 w-3", getPriorityColor(task.priority))} />
-                    <p className="font-medium truncate">{task.title}</p>
-                    {getStatusBadge(task)}
-                  </div>
-                  {task.description && (
-                    <p className="text-sm text-muted-foreground truncate mt-1">{task.description}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    {task.due_date && (
-                      <span className={cn(
-                        "text-xs flex items-center gap-1",
-                        getTaskStatus(task) === 'overdue' ? 'text-debt font-medium' : 'text-muted-foreground'
-                      )}>
-                        <Calendar className="h-3 w-3" />
-                        {format(parseISO(task.due_date), 'MMM d')}
-                      </span>
-                    )}
-                    {task.due_time && (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {task.due_time}
-                      </span>
-                    )}
-                    {getRepeatBadge(task.repeat_type)}
-                    {task.auto_complete && (
-                      <Badge variant="outline" className="text-xs">Auto</Badge>
-                    )}
-                    {/* Delegation status indicator */}
-                    {task.delegation_status === 'pending' && (
-                      <Badge variant="outline" className="text-xs text-amber-500 border-amber-500">
-                        <HelpCircle className="h-3 w-3 mr-1" />
-                        Pending
-                      </Badge>
-                    )}
-                    {task.delegation_status === 'accepted' && (
-                      <Badge variant="outline" className="text-xs text-savings border-savings">
-                        <Check className="h-3 w-3 mr-1" />
-                        Accepted
-                      </Badge>
-                    )}
-                    {task.delegation_status === 'rejected' && (
-                      <Badge variant="outline" className="text-xs text-debt border-debt">
-                        <X className="h-3 w-3 mr-1" />
-                        Declined
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {completedTasks.length > 0 && (
-            <>
-              <p className="text-sm text-muted-foreground pt-4 pb-2">Completed</p>
-              {completedTasks.map(task => (
-                <div
-                  key={task.id}
-                  className="finance-card p-3 opacity-60 cursor-pointer"
-                  onClick={() => {
-                    setEditingTask(task);
-                    setShowForm(true);
-                  }}
-                >
-                  <div className="flex items-start gap-3">
-                    <Checkbox
-                      checked={task.is_completed}
-                      onCheckedChange={() => handleToggleComplete(task)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="mt-0.5"
-                    />
-                    <p className="font-medium line-through text-muted-foreground">{task.title}</p>
-                  </div>
-                </div>
-              ))}
-            </>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-4 gap-2 mb-4">
+        <button
+          onClick={() => setFilter('all')}
+          className={cn(
+            "finance-card text-center p-3 transition-all",
+            filter === 'all' && "ring-2 ring-primary"
           )}
+        >
+          <p className="text-xl font-bold">{stats.total}</p>
+          <p className="text-[10px] text-muted-foreground">Total</p>
+        </button>
+        <button
+          onClick={() => setFilter('today')}
+          className={cn(
+            "finance-card text-center p-3 transition-all",
+            filter === 'today' && "ring-2 ring-primary"
+          )}
+        >
+          <p className="text-xl font-bold text-amber-500">{stats.todayDue}</p>
+          <p className="text-[10px] text-muted-foreground">Today</p>
+        </button>
+        <button
+          onClick={() => setFilter('overdue')}
+          className={cn(
+            "finance-card text-center p-3 transition-all",
+            filter === 'overdue' && "ring-2 ring-primary"
+          )}
+        >
+          <p className="text-xl font-bold text-debt">{stats.overdue}</p>
+          <p className="text-[10px] text-muted-foreground">Overdue</p>
+        </button>
+        <div className="finance-card text-center p-3">
+          <p className="text-xl font-bold text-savings">{stats.completed}</p>
+          <p className="text-[10px] text-muted-foreground">Done</p>
         </div>
+      </div>
+
+      {/* View Toggle & Filters */}
+      <div className="flex items-center gap-2 mb-4">
+        <div className="flex bg-muted rounded-lg p-1">
+          <button
+            onClick={() => setViewMode('list')}
+            className={cn(
+              "p-1.5 rounded",
+              viewMode === 'list' && "bg-background shadow-sm"
+            )}
+          >
+            <List className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setViewMode('board')}
+            className={cn(
+              "p-1.5 rounded",
+              viewMode === 'board' && "bg-background shadow-sm"
+            )}
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </button>
+        </div>
+
+        <Select value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
+          <SelectTrigger className="w-28 h-8">
+            <Filter className="h-3 w-3 mr-1" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="today">Today</SelectItem>
+            <SelectItem value="week">This Week</SelectItem>
+            <SelectItem value="month">This Month</SelectItem>
+            <SelectItem value="overdue">Overdue</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Quick Add for Household Members */}
+        <div className="flex-1" />
+        <div className="flex -space-x-1">
+          {HOUSEHOLD_MEMBERS.slice(0, 3).map(member => (
+            <Avatar key={member.email} className="h-6 w-6 border-2 border-background">
+              <AvatarFallback className={cn("text-[10px] text-white", member.color)}>
+                {member.name.charAt(0)}
+              </AvatarFallback>
+            </Avatar>
+          ))}
+        </div>
+      </div>
+
+      {/* Board View */}
+      {viewMode === 'board' && (
+        <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4">
+          <BoardColumn 
+            title="To Do" 
+            tasks={tasksByStatus.todo}
+            icon={<Flag className="h-4 w-4 text-muted-foreground" />}
+            color="bg-muted/50"
+          />
+          <BoardColumn 
+            title="Awaiting Response" 
+            tasks={tasksByStatus.pending}
+            icon={<HelpCircle className="h-4 w-4 text-amber-500" />}
+            color="bg-amber-500/10"
+          />
+          <BoardColumn 
+            title="Completed" 
+            tasks={tasksByStatus.done}
+            icon={<CheckCircle2 className="h-4 w-4 text-savings" />}
+            color="bg-savings/10"
+          />
+        </div>
+      )}
+
+      {/* List View */}
+      {viewMode === 'list' && (
+        <>
+          {filteredTasks.length === 0 ? (
+            <div className="finance-card text-center py-12">
+              <CheckCircle2 className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+              <p className="text-muted-foreground mb-1">No tasks found</p>
+              <p className="text-xs text-muted-foreground mb-4">
+                {filter !== 'all' ? 'Try changing your filter' : 'Create your first task to get started'}
+              </p>
+              <Button variant="outline" onClick={() => setShowForm(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Task
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {/* Overdue Section */}
+              {stats.overdue > 0 && filter !== 'overdue' && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="h-4 w-4 text-debt" />
+                    <span className="text-sm font-medium text-debt">Overdue ({stats.overdue})</span>
+                  </div>
+                  {filteredTasks
+                    .filter(t => getTaskStatus(t) === 'overdue')
+                    .map(task => (
+                      <TaskCard key={task.id} task={task} />
+                    ))
+                  }
+                </div>
+              )}
+
+              {/* Active Tasks */}
+              {filteredTasks
+                .filter(t => !t.is_completed && getTaskStatus(t) !== 'overdue')
+                .map(task => (
+                  <TaskCard key={task.id} task={task} />
+                ))
+              }
+
+              {/* Completed Section */}
+              {filteredTasks.filter(t => t.is_completed).length > 0 && (
+                <div className="pt-4">
+                  <p className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Completed ({filteredTasks.filter(t => t.is_completed).length})
+                  </p>
+                  {filteredTasks
+                    .filter(t => t.is_completed)
+                    .slice(0, 5)
+                    .map(task => (
+                      <TaskCard key={task.id} task={task} compact />
+                    ))
+                  }
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       <TaskFormSheet
