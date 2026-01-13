@@ -21,132 +21,73 @@ export function SwipeableRow({
 }: SwipeableRowProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [startX, setStartX] = useState(0);
-  const [currentX, setCurrentX] = useState(0);
+  const [currentTranslate, setCurrentTranslate] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
 
-  const SWIPE_THRESHOLD = 50;
+  const SWIPE_THRESHOLD = 40;
   const ACTION_WIDTH = 140;
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const handleStart = (clientX: number) => {
     if (disabled) return;
-    setStartX(e.touches[0].clientX);
+    setStartX(clientX);
     setIsDragging(true);
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handleMove = (clientX: number) => {
     if (!isDragging || disabled) return;
-    const diff = startX - e.touches[0].clientX;
+    const diff = startX - clientX;
     
     if (isOpen) {
-      // When open, allow swiping right to close
-      const newX = ACTION_WIDTH + diff;
-      setCurrentX(Math.max(0, Math.min(newX, ACTION_WIDTH)));
+      // Currently open: swiping right (negative diff) closes it
+      const newTranslate = Math.max(0, Math.min(ACTION_WIDTH, ACTION_WIDTH + diff));
+      setCurrentTranslate(newTranslate);
     } else {
-      // When closed, allow swiping left to open
-      if (diff > 0) {
-        setCurrentX(Math.min(diff, ACTION_WIDTH));
-      }
+      // Currently closed: swiping left (positive diff) opens it
+      const newTranslate = Math.max(0, Math.min(ACTION_WIDTH, diff));
+      setCurrentTranslate(newTranslate);
     }
   };
 
-  const handleTouchEnd = () => {
-    if (!isDragging || disabled) return;
-    setIsDragging(false);
-    
-    if (isOpen) {
-      // If currently open, close if swiped past threshold
-      if (currentX < ACTION_WIDTH - SWIPE_THRESHOLD) {
-        closeActions();
-      } else {
-        setCurrentX(ACTION_WIDTH);
-      }
-    } else {
-      // If currently closed, open if swiped past threshold
-      if (currentX > SWIPE_THRESHOLD) {
-        setIsOpen(true);
-        setCurrentX(ACTION_WIDTH);
-      } else {
-        setCurrentX(0);
-      }
-    }
-  };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (disabled) return;
-    setStartX(e.clientX);
-    setIsDragging(true);
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || disabled) return;
-    const diff = startX - e.clientX;
-    
-    if (isOpen) {
-      const newX = ACTION_WIDTH + diff;
-      setCurrentX(Math.max(0, Math.min(newX, ACTION_WIDTH)));
-    } else {
-      if (diff > 0) {
-        setCurrentX(Math.min(diff, ACTION_WIDTH));
-      }
-    }
-  };
-
-  const handleMouseUp = () => {
+  const handleEnd = () => {
     if (!isDragging || disabled) return;
     setIsDragging(false);
     
-    if (isOpen) {
-      if (currentX < ACTION_WIDTH - SWIPE_THRESHOLD) {
-        closeActions();
-      } else {
-        setCurrentX(ACTION_WIDTH);
-      }
+    // Snap open or closed based on current position
+    if (currentTranslate > SWIPE_THRESHOLD) {
+      setIsOpen(true);
+      setCurrentTranslate(ACTION_WIDTH);
     } else {
-      if (currentX > SWIPE_THRESHOLD) {
-        setIsOpen(true);
-        setCurrentX(ACTION_WIDTH);
-      } else {
-        setCurrentX(0);
-      }
+      setIsOpen(false);
+      setCurrentTranslate(0);
     }
   };
 
-  const handleMouseLeave = () => {
-    if (isDragging) {
-      handleMouseUp();
-    }
-  };
+  // Touch handlers
+  const handleTouchStart = (e: React.TouchEvent) => handleStart(e.touches[0].clientX);
+  const handleTouchMove = (e: React.TouchEvent) => handleMove(e.touches[0].clientX);
+  const handleTouchEnd = () => handleEnd();
 
-  const closeActions = () => {
-    setIsOpen(false);
-    setCurrentX(0);
-  };
+  // Mouse handlers
+  const handleMouseDown = (e: React.MouseEvent) => handleStart(e.clientX);
+  const handleMouseMove = (e: React.MouseEvent) => handleMove(e.clientX);
+  const handleMouseUp = () => handleEnd();
+  const handleMouseLeave = () => { if (isDragging) handleEnd(); };
 
   const handleAction = (e: React.MouseEvent, action: () => void) => {
     e.stopPropagation();
-    closeActions();
+    setIsOpen(false);
+    setCurrentTranslate(0);
     action();
   };
 
-  const handleContentClick = (e: React.MouseEvent) => {
-    if (isOpen) {
-      e.stopPropagation();
-      e.preventDefault();
-      closeActions();
-    }
-  };
-
-  const translateX = isDragging ? -currentX : (isOpen ? -ACTION_WIDTH : 0);
+  const translateX = -currentTranslate;
 
   return (
     <div className={cn('relative overflow-hidden rounded-lg', className)}>
-      {/* Action buttons background */}
+      {/* Action buttons */}
       <div className="absolute inset-y-0 right-0 flex items-center">
-        <div 
-          className="flex h-full items-stretch"
-          style={{ width: `${ACTION_WIDTH}px` }}
-        >
+        <div className="flex h-full items-stretch" style={{ width: `${ACTION_WIDTH}px` }}>
           {onEdit && (
             <button
               onClick={(e) => handleAction(e, onEdit)}
@@ -182,8 +123,7 @@ export function SwipeableRow({
         ref={rowRef}
         className={cn(
           'relative bg-card',
-          isDragging ? 'transition-none' : 'transition-transform duration-200',
-          isOpen && 'cursor-pointer'
+          isDragging ? 'transition-none' : 'transition-transform duration-200'
         )}
         style={{ transform: `translateX(${translateX}px)` }}
         onTouchStart={handleTouchStart}
@@ -193,7 +133,6 @@ export function SwipeableRow({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
-        onClick={handleContentClick}
       >
         {children}
       </div>
