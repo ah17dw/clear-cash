@@ -1,13 +1,13 @@
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Trash2, TrendingUp, Calendar } from 'lucide-react';
+import { format, addMonths } from 'date-fns';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
 import { useSavingsAccount, useDeleteSavingsAccount } from '@/hooks/useFinanceData';
-import { formatPercentage, formatCurrency } from '@/lib/format';
+import { formatPercentage } from '@/lib/format';
 import { SavingsFormSheet } from '@/components/savings/SavingsFormSheet';
-import { useState, useMemo } from 'react';
-import { format, addMonths } from 'date-fns';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +27,26 @@ export default function SavingsDetail() {
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
+  const monthlyProjections = useMemo(() => {
+    if (!account) return [];
+    const balance = Number(account.balance);
+    const aer = Number(account.aer);
+    const projections: { month: Date; balance: number; interest: number }[] = [];
+    let runningBalance = balance;
+    const monthlyRate = aer / 100 / 12;
+    
+    for (let i = 0; i < 12; i++) {
+      const interest = runningBalance * monthlyRate;
+      runningBalance += interest;
+      projections.push({
+        month: addMonths(new Date(), i),
+        balance: runningBalance,
+        interest,
+      });
+    }
+    return projections;
+  }, [account]);
+
   if (isLoading) {
     return (
       <div className="page-container">
@@ -44,7 +64,7 @@ export default function SavingsDetail() {
       <div className="page-container">
         <PageHeader title="Savings" showBack />
         <div className="finance-card p-4">
-          <p className="font-medium">Couldn’t load that savings account.</p>
+          <p className="font-medium">Couldn't load that savings account.</p>
           <p className="text-sm text-muted-foreground mt-1">It may have been deleted, or you may not have access.</p>
           <Button className="mt-4" variant="outline" onClick={() => navigate('/savings')}>Back to Savings</Button>
         </div>
@@ -61,25 +81,6 @@ export default function SavingsDetail() {
   const aer = Number(account.aer);
   const monthlyInterest = (balance * aer) / 100 / 12;
   const yearlyInterest = (balance * aer) / 100;
-
-  // Calculate 12-month compounding projection
-  const monthlyProjections = useMemo(() => {
-    const projections: { month: Date; balance: number; interest: number }[] = [];
-    let runningBalance = balance;
-    const monthlyRate = aer / 100 / 12;
-    
-    for (let i = 0; i < 12; i++) {
-      const interest = runningBalance * monthlyRate;
-      runningBalance += interest;
-      projections.push({
-        month: addMonths(new Date(), i),
-        balance: runningBalance,
-        interest,
-      });
-    }
-    return projections;
-  }, [balance, aer]);
-
   const projectedBalance12Mo = monthlyProjections[11]?.balance ?? balance;
   const totalProjectedInterest = projectedBalance12Mo - balance;
 
@@ -137,11 +138,11 @@ export default function SavingsDetail() {
             <p className="font-medium">Estimated Interest</p>
           </div>
           <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="p-3 rounded-lg bg-savings-muted">
+            <div className="p-3 rounded-lg bg-savings/10">
               <p className="text-xs text-muted-foreground">Monthly</p>
               <AmountDisplay amount={monthlyInterest} size="sm" className="text-savings" />
             </div>
-            <div className="p-3 rounded-lg bg-savings-muted">
+            <div className="p-3 rounded-lg bg-savings/10">
               <p className="text-xs text-muted-foreground">Yearly (simple)</p>
               <AmountDisplay amount={yearlyInterest} size="sm" className="text-savings" />
             </div>
