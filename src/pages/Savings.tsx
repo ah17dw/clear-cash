@@ -3,15 +3,39 @@ import { useNavigate } from 'react-router-dom';
 import { PiggyBank, ChevronRight, Percent, TrendingUp } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
-import { useSavingsAccounts } from '@/hooks/useFinanceData';
+import { SwipeableRow } from '@/components/ui/swipeable-row';
+import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
+import { useSavingsAccounts, useDeleteSavingsAccount, useCreateSavingsAccount } from '@/hooks/useFinanceData';
 import { SavingsFormSheet } from '@/components/savings/SavingsFormSheet';
 import { InterestStatementSheet } from '@/components/savings/InterestStatementSheet';
+
+interface SavingsAccount {
+  id: string;
+  name: string;
+  provider: string | null;
+  balance: number;
+  aer: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  user_id: string;
+}
 
 export default function Savings() {
   const navigate = useNavigate();
   const { data: accounts, isLoading } = useSavingsAccounts();
+  const deleteSavingsAccount = useDeleteSavingsAccount();
+  const createSavingsAccount = useCreateSavingsAccount();
   const [showForm, setShowForm] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<SavingsAccount | undefined>();
   const [showStatement, setShowStatement] = useState(false);
+
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    id: string;
+    name: string;
+  }>({ open: false, id: '', name: '' });
 
   const totalSavings = accounts?.reduce((sum, a) => sum + Number(a.balance), 0) ?? 0;
   
@@ -20,11 +44,35 @@ export default function Savings() {
     return sum + (Number(a.balance) * Number(a.aer)) / 100;
   }, 0) ?? 0;
 
+  const handleDelete = (account: SavingsAccount) => {
+    setDeleteConfirm({ open: true, id: account.id, name: account.name });
+  };
+
+  const confirmDelete = () => {
+    deleteSavingsAccount.mutate(deleteConfirm.id);
+    setDeleteConfirm({ open: false, id: '', name: '' });
+  };
+
+  const handleDuplicate = (account: SavingsAccount) => {
+    createSavingsAccount.mutate({
+      name: `${account.name} (Copy)`,
+      provider: account.provider,
+      balance: account.balance,
+      aer: account.aer,
+      notes: account.notes,
+    });
+  };
+
+  const handleEdit = (account: SavingsAccount) => {
+    setEditingAccount(account);
+    setShowForm(true);
+  };
+
   return (
     <div className="page-container">
       <PageHeader 
         title="Savings" 
-        onAdd={() => setShowForm(true)}
+        onAdd={() => { setEditingAccount(undefined); setShowForm(true); }}
         addLabel="Add"
       />
 
@@ -68,7 +116,7 @@ export default function Savings() {
           <PiggyBank className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
           <p className="text-muted-foreground">No savings accounts yet</p>
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => { setEditingAccount(undefined); setShowForm(true); }}
             className="text-primary text-sm mt-2 hover:underline"
           >
             Add your first account
@@ -79,8 +127,6 @@ export default function Savings() {
           {accounts?.map((account, index) => {
             const balance = Number(account.balance);
             const aer = Number(account.aer);
-            const monthlyInterest = (balance * aer) / 100 / 12;
-            const yearlyInterest = (balance * aer) / 100;
             
             // Calculate 12-month compounded projection
             let projectedBalance = balance;
@@ -91,45 +137,59 @@ export default function Savings() {
             const projectedInterest = projectedBalance - balance;
             
             return (
-              <button
+              <SwipeableRow
                 key={account.id}
-                onClick={() => navigate(`/savings/${account.id}`)}
-                className="w-full finance-card flex items-center gap-3 list-item-interactive animate-fade-in"
-                style={{ animationDelay: `${index * 30}ms` }}
+                onEdit={() => handleEdit(account)}
+                onDelete={() => handleDelete(account)}
+                onDuplicate={() => handleDuplicate(account)}
               >
-                <div className="w-10 h-10 rounded-full bg-savings/20 flex items-center justify-center text-savings font-semibold">
-                  {account.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex-1 text-left min-w-0">
-                  <p className="font-medium truncate">{account.name}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                    {account.provider && <span className="truncate">{account.provider}</span>}
-                    <span className="flex items-center gap-0.5">
-                      <Percent className="h-3 w-3" />
-                      {aer}% AER
-                    </span>
+                <button
+                  onClick={() => navigate(`/savings/${account.id}`)}
+                  className="w-full finance-card flex items-center gap-3 list-item-interactive animate-fade-in text-left"
+                  style={{ animationDelay: `${index * 30}ms` }}
+                >
+                  <div className="w-10 h-10 rounded-full bg-savings/20 flex items-center justify-center text-savings font-semibold">
+                    {account.name.charAt(0).toUpperCase()}
                   </div>
-                </div>
+                  <div className="flex-1 text-left min-w-0">
+                    <p className="font-medium truncate">{account.name}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                      {account.provider && <span className="truncate">{account.provider}</span>}
+                      <span className="flex items-center gap-0.5">
+                        <Percent className="h-3 w-3" />
+                        {aer}% AER
+                      </span>
+                    </div>
+                  </div>
 
-                <div className="text-right flex-shrink-0">
-                  <AmountDisplay amount={balance} size="sm" className="text-savings" />
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    +£{projectedInterest.toFixed(0)}/yr
-                  </p>
-                </div>
+                  <div className="text-right flex-shrink-0">
+                    <AmountDisplay amount={balance} size="sm" className="text-savings" />
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      +£{projectedInterest.toFixed(0)}/yr
+                    </p>
+                  </div>
 
-                <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              </button>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                </button>
+              </SwipeableRow>
             );
           })}
         </div>
       )}
 
-      <SavingsFormSheet open={showForm} onOpenChange={setShowForm} />
+      <SavingsFormSheet open={showForm} onOpenChange={setShowForm} account={editingAccount} />
       <InterestStatementSheet 
         open={showStatement} 
         onOpenChange={setShowStatement}
         accounts={accounts ?? []}
+      />
+
+      <DeleteConfirmDialog
+        open={deleteConfirm.open}
+        onOpenChange={(open) => setDeleteConfirm(prev => ({ ...prev, open }))}
+        onConfirm={confirmDelete}
+        title="Delete Savings Account"
+        itemName={deleteConfirm.name}
       />
     </div>
   );

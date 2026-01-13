@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CreditCard, ChevronRight, Calendar, Percent, CalendarDays } from 'lucide-react';
+import { CreditCard, ChevronRight, Percent, CalendarDays } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
-import { useDebts, useExpenseItems, useIncomeSources } from '@/hooks/useFinanceData';
-import { getDaysUntil, formatDateShort } from '@/lib/format';
+import { SwipeableRow } from '@/components/ui/swipeable-row';
+import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
+import { useDebts, useExpenseItems, useIncomeSources, useDeleteDebt, useCreateDebt } from '@/hooks/useFinanceData';
+import { getDaysUntil } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { DebtFormSheet } from '@/components/debts/DebtFormSheet';
 import { getAdjustedBalance } from '@/lib/debt-utils';
@@ -13,14 +15,45 @@ import { FinanceCalendar } from '@/components/finance/FinanceCalendar';
 
 type SortOption = 'balance' | 'apr' | 'promo_ending';
 
+interface Debt {
+  id: string;
+  name: string;
+  type: string;
+  balance: number;
+  starting_balance: number;
+  apr: number;
+  minimum_payment: number;
+  planned_payment: number | null;
+  payment_day: number | null;
+  is_promo_0: boolean;
+  promo_start_date: string | null;
+  promo_end_date: string | null;
+  post_promo_apr: number | null;
+  lender: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  user_id: string;
+}
+
 export default function Debts() {
   const navigate = useNavigate();
   const { data: debts, isLoading } = useDebts();
   const { data: expenses } = useExpenseItems();
   const { data: income } = useIncomeSources();
+  const deleteDebt = useDeleteDebt();
+  const createDebt = useCreateDebt();
   const [showForm, setShowForm] = useState(false);
+  const [editingDebt, setEditingDebt] = useState<Debt | undefined>();
   const [showCalendar, setShowCalendar] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('balance');
+
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    id: string;
+    name: string;
+  }>({ open: false, id: '', name: '' });
 
   const sortedDebts = [...(debts || [])].sort((a, b) => {
     switch (sortBy) {
@@ -54,11 +87,44 @@ export default function Debts() {
   const totalMinimums = debts?.reduce((sum, d) => sum + Number(d.minimum_payment || 0), 0) ?? 0;
   const totalPlanned = debts?.reduce((sum, d) => sum + Number(d.planned_payment) > 0 ? Number(d.planned_payment) : Number(d.minimum_payment) || 0, 0) ?? 0;
 
+  const handleDelete = (debt: Debt) => {
+    setDeleteConfirm({ open: true, id: debt.id, name: debt.name });
+  };
+
+  const confirmDelete = () => {
+    deleteDebt.mutate(deleteConfirm.id);
+    setDeleteConfirm({ open: false, id: '', name: '' });
+  };
+
+  const handleDuplicate = (debt: Debt) => {
+    createDebt.mutate({
+      name: `${debt.name} (Copy)`,
+      type: debt.type,
+      balance: debt.balance,
+      starting_balance: debt.starting_balance,
+      apr: debt.apr,
+      minimum_payment: debt.minimum_payment,
+      planned_payment: debt.planned_payment,
+      payment_day: debt.payment_day,
+      is_promo_0: debt.is_promo_0,
+      promo_start_date: debt.promo_start_date,
+      promo_end_date: debt.promo_end_date,
+      post_promo_apr: debt.post_promo_apr,
+      lender: debt.lender,
+      notes: debt.notes,
+    });
+  };
+
+  const handleEdit = (debt: Debt) => {
+    setEditingDebt(debt);
+    setShowForm(true);
+  };
+
   return (
     <div className="page-container">
       <PageHeader 
         title="Debts" 
-        onAdd={() => setShowForm(true)}
+        onAdd={() => { setEditingDebt(undefined); setShowForm(true); }}
         addLabel="Add"
       />
 
@@ -135,7 +201,7 @@ export default function Debts() {
           <CreditCard className="h-12 w-12 text-muted-foreground/50 mx-auto mb-3" />
           <p className="text-muted-foreground">No debts added yet</p>
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => { setEditingDebt(undefined); setShowForm(true); }}
             className="text-primary text-sm mt-2 hover:underline"
           >
             Add your first debt
@@ -179,104 +245,119 @@ export default function Debts() {
             const nextPaymentDate = getNextPaymentDate();
 
             return (
-              <button
+              <SwipeableRow
                 key={debt.id}
-                onClick={() => navigate(`/debts/${debt.id}`)}
-                className="w-full finance-card flex flex-col gap-2 list-item-interactive animate-fade-in overflow-hidden"
-                style={{ 
-                  animationDelay: `${index * 30}ms`,
-                  background: `linear-gradient(90deg, hsl(0 72% 51% / ${gradientIntensity * 0.15}) 0%, hsl(var(--card)) ${Math.max(gradientIntensity, 20)}%)`
-                }}
+                onEdit={() => handleEdit(debt)}
+                onDelete={() => handleDelete(debt)}
+                onDuplicate={() => handleDuplicate(debt)}
               >
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 text-left min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium truncate">{debt.name}</p>
-                      {/* Months remaining pill */}
-                      {(() => {
-                        if (adjustedBalance <= 0) {
-                          return <span className="text-[10px] bg-savings/20 text-savings px-1.5 py-0.5 rounded-full font-medium">Paid off</span>;
-                        }
-                        if (monthlyPayment <= 0) {
-                          return <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">Set payment</span>;
-                        }
-                        const months = Math.ceil(adjustedBalance / monthlyPayment);
-                        if (months > 240) {
-                          return <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">240+ mo</span>;
-                        }
-                        return <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">{months} mo left</span>;
-                      })()}
+                <button
+                  onClick={() => navigate(`/debts/${debt.id}`)}
+                  className="w-full finance-card flex flex-col gap-2 list-item-interactive animate-fade-in overflow-hidden text-left"
+                  style={{ 
+                    animationDelay: `${index * 30}ms`,
+                    background: `linear-gradient(90deg, hsl(0 72% 51% / ${gradientIntensity * 0.15}) 0%, hsl(var(--card)) ${Math.max(gradientIntensity, 20)}%)`
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 text-left min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium truncate">{debt.name}</p>
+                        {/* Months remaining pill */}
+                        {(() => {
+                          if (adjustedBalance <= 0) {
+                            return <span className="text-[10px] bg-savings/20 text-savings px-1.5 py-0.5 rounded-full font-medium">Paid off</span>;
+                          }
+                          if (monthlyPayment <= 0) {
+                            return <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">Set payment</span>;
+                          }
+                          const months = Math.ceil(adjustedBalance / monthlyPayment);
+                          if (months > 240) {
+                            return <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">240+ mo</span>;
+                          }
+                          return <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">{months} mo left</span>;
+                        })()}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                        {debt.lender && <span className="truncate">{debt.lender}</span>}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                      {debt.lender && <span className="truncate">{debt.lender}</span>}
+
+                    <div className="text-right flex-shrink-0">
+                      <AmountDisplay amount={adjustedBalance} size="sm" />
+                      {paymentsMade > 0 && (
+                        <p className="text-[10px] text-muted-foreground">Est. after {paymentsMade} payment{paymentsMade > 1 ? 's' : ''}</p>
+                      )}
+                      <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                        {debt.is_promo_0 ? (
+                          <span className="alert-badge alert-badge-info text-[10px] px-1.5 py-0.5">
+                            0%
+                            {daysUntilPromoEnds !== null && daysUntilPromoEnds <= 90 && (
+                              <span className="ml-1">{daysUntilPromoEnds}d</span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                            <Percent className="h-3 w-3" />
+                            {debt.apr}%
+                          </span>
+                        )}
+                      </div>
                     </div>
+
+                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   </div>
 
-                  <div className="text-right flex-shrink-0">
-                    <AmountDisplay amount={adjustedBalance} size="sm" />
-                    {paymentsMade > 0 && (
-                      <p className="text-[10px] text-muted-foreground">Est. after {paymentsMade} payment{paymentsMade > 1 ? 's' : ''}</p>
-                    )}
-                    <div className="flex items-center justify-end gap-1.5 mt-0.5">
-                      {debt.is_promo_0 ? (
-                        <span className="alert-badge alert-badge-info text-[10px] px-1.5 py-0.5">
-                          0%
-                          {daysUntilPromoEnds !== null && daysUntilPromoEnds <= 90 && (
-                            <span className="ml-1">{daysUntilPromoEnds}d</span>
+                  {/* Progress bar and next payment */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{ 
+                            width: `${progress}%`,
+                            backgroundColor: `hsl(${Math.round(progress * 1.2)}, 70%, 45%)`
+                          }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {progress.toFixed(0)}% paid off
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      {monthlyPayment > 0 ? (
+                        <div>
+                          <p className="text-xs font-medium">
+                            £{monthlyPayment.toFixed(2)}
+                          </p>
+                          {nextPaymentDate && (
+                            <p className="text-[10px] text-muted-foreground">
+                              Due {nextPaymentDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                            </p>
                           )}
-                        </span>
+                        </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                          <Percent className="h-3 w-3" />
-                          {debt.apr}%
-                        </span>
+                        <p className="text-[10px] text-muted-foreground">No payment set</p>
                       )}
                     </div>
                   </div>
-
-                  <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                </div>
-
-                {/* Progress bar and next payment */}
-                <div className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className="h-full rounded-full transition-all duration-300"
-                        style={{ 
-                          width: `${progress}%`,
-                          backgroundColor: `hsl(${Math.round(progress * 1.2)}, 70%, 45%)`
-                        }}
-                      />
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {progress.toFixed(0)}% paid off
-                    </p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    {monthlyPayment > 0 ? (
-                      <div>
-                        <p className="text-xs font-medium">
-                          £{monthlyPayment.toFixed(2)}
-                        </p>
-                        {nextPaymentDate && (
-                          <p className="text-[10px] text-muted-foreground">
-                            Due {nextPaymentDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-muted-foreground">No payment set</p>
-                    )}
-                  </div>
-                </div>
-              </button>
+                </button>
+              </SwipeableRow>
             );
           })}
         </div>
       )}
 
-      <DebtFormSheet open={showForm} onOpenChange={setShowForm} />
+      <DebtFormSheet open={showForm} onOpenChange={setShowForm} debt={editingDebt} />
+
+      <DeleteConfirmDialog
+        open={deleteConfirm.open}
+        onOpenChange={(open) => setDeleteConfirm(prev => ({ ...prev, open }))}
+        onConfirm={confirmDelete}
+        title="Delete Debt"
+        itemName={deleteConfirm.name}
+        description={`Are you sure you want to delete "${deleteConfirm.name}"? This will also remove all payment history.`}
+      />
     </div>
   );
 }
