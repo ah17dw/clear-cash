@@ -152,8 +152,13 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
       const extracted = data.data;
       if (extracted) {
         if (extracted.name) setValue('name', extracted.name);
-        if (extracted.monthly_amount) setValue('monthly_amount', extracted.monthly_amount);
+        if (extracted.monthly_amount) {
+          // If user has selected annual, keep the extracted amount as annual
+          // The AI extracts the amount shown in the document regardless of frequency
+          setValue('monthly_amount', extracted.monthly_amount);
+        }
         if (extracted.category) setValue('category', extracted.category);
+        // Don't override the user's frequency selection
         toast.success('Information extracted from file!');
       }
     } catch (error) {
