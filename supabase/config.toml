@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.tag-task]
 verify_jwt = false
+
+[functions.extract-expense]
+verify_jwt = false
+
+[functions.delegation-response]
+verify_jwt = false

@@ -47,6 +47,12 @@ function weekdayToIcsByday(d: Date) {
   return ["SU", "MO", "TU", "WE", "TH", "FR", "SA"][day];
 }
 
+function generateToken(): string {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+}
+
 function buildTaskIcs(opts: {
   uid: string;
   title: string;
@@ -185,7 +191,7 @@ serve(async (req) => {
     // Validate ownership + load task info for email/ICS
     const { data: task, error: taskErr } = await admin
       .from("tasks")
-      .select("id,title,description,due_date,due_time,repeat_type")
+      .select("id,title,description,due_date,due_time,repeat_type,delegation_status")
       .eq("id", taskId)
       .eq("user_id", callerId)
       .single();
@@ -198,7 +204,24 @@ serve(async (req) => {
       });
     }
 
-    // Upsert-ish: prevent duplicates
+    // Generate a unique token for this delegation
+    const delegationToken = generateToken();
+
+    // Create a delegation response record
+    const { error: delegationInsertErr } = await admin
+      .from("task_delegation_responses")
+      .insert({
+        task_id: taskId,
+        email: taggedEmail,
+        token: delegationToken,
+      });
+
+    if (delegationInsertErr) {
+      console.error("Delegation insert failed", delegationInsertErr);
+      // Continue anyway - the email can still be sent
+    }
+
+    // Upsert-ish: prevent duplicates in task_tags
     const { data: existing } = await admin
       .from("task_tags")
       .select("id")
@@ -226,6 +249,15 @@ serve(async (req) => {
       tagRecord = inserted;
     }
 
+    // Update task delegation status to pending
+    await admin
+      .from("tasks")
+      .update({ 
+        delegation_status: 'pending',
+        delegation_token: delegationToken 
+      })
+      .eq("id", taskId);
+
     // Send email + calendar invite
     const resendApiKey = Deno.env.get("RESEND_API_KEY") ?? Deno.env.get("Resend") ?? "";
     if (!resendApiKey) {
@@ -247,12 +279,26 @@ serve(async (req) => {
       repeatType: task.repeat_type,
     });
 
+    // Build confirm/decline URLs - these will be handled by an edge function
+    const baseUrl = supabaseUrl.replace('/rest/v1', '');
+    const confirmUrl = `${baseUrl}/functions/v1/delegation-response?token=${delegationToken}&response=accepted`;
+    const declineUrl = `${baseUrl}/functions/v1/delegation-response?token=${delegationToken}&response=rejected`;
+
     const htmlParts = [
-      `<h2>New task assigned</h2>`,
-      `<p><strong>${escapeIcsText(task.title)}</strong></p>`,
-      task.description ? `<p>${escapeIcsText(task.description)}</p>` : "",
-      task.due_date ? `<p>Due: ${task.due_date}${task.due_time ? ` ${task.due_time}` : ""}</p>` : "",
-      `<p>If your email client supports it, you can add the attached calendar invite.</p>`,
+      `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">`,
+      `<h2 style="color: #333; margin-bottom: 20px;">New Task Assigned to You</h2>`,
+      `<div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin-bottom: 20px;">`,
+      `<h3 style="color: #1a1a1a; margin: 0 0 10px 0;">${escapeIcsText(task.title)}</h3>`,
+      task.description ? `<p style="color: #666; margin: 0 0 10px 0;">${escapeIcsText(task.description)}</p>` : "",
+      task.due_date ? `<p style="color: #888; font-size: 14px; margin: 0;"><strong>Due:</strong> ${task.due_date}${task.due_time ? ` at ${task.due_time}` : ""}</p>` : "",
+      `</div>`,
+      `<p style="color: #666; margin-bottom: 20px;">Please respond to confirm or decline this task:</p>`,
+      `<div style="margin-bottom: 30px;">`,
+      `<a href="${confirmUrl}" style="display: inline-block; background: #22c55e; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; margin-right: 10px; font-weight: 500;">✓ Accept Task</a>`,
+      `<a href="${declineUrl}" style="display: inline-block; background: #ef4444; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 500;">✕ Decline Task</a>`,
+      `</div>`,
+      `<p style="color: #999; font-size: 12px;">If your email client supports it, you can also add the attached calendar invite.</p>`,
+      `</div>`,
     ].filter(Boolean);
 
     const emailPayload: Record<string, unknown> = {

@@ -11,9 +11,13 @@ serve(async (req) => {
   }
 
   try {
-    const { fileBase64, fileName, mimeType } = await req.json();
+    const body = await req.json();
+    const { fileBase64, fileName, mimeType } = body;
+    
+    console.log("Received extraction request:", { fileName, mimeType, hasBase64: !!fileBase64, base64Length: fileBase64?.length });
     
     if (!fileBase64) {
+      console.error("No file provided in request");
       return new Response(
         JSON.stringify({ error: "No file provided" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -31,74 +35,89 @@ serve(async (req) => {
 
     console.log(`Extracting expense info from file: ${fileName}, type: ${mimeType}`);
 
-    const systemPrompt = `You are an expert at extracting expense information from documents like invoices, bills, contracts, and receipts.
-Extract the following fields from the provided document. If a field is not found, return null for that field.
-Always return amounts in GBP (£). Convert from other currencies if needed.
+    // For images, use vision capabilities with a simpler approach
+    const isImage = mimeType?.startsWith('image/');
+    const isPdf = mimeType === 'application/pdf' || fileName?.toLowerCase().endsWith('.pdf');
+    
+    console.log(`File type detection: isImage=${isImage}, isPdf=${isPdf}`);
 
-Categories available: housing, utilities, groceries, transport, insurance, subscriptions, entertainment, health, other`;
+    // Build the request for image/document analysis
+    const systemPrompt = `You are an expert at extracting expense and bill information from documents like invoices, bills, contracts, receipts, and screenshots.
 
-    // Build messages based on file type
-    const messages: any[] = [
-      { role: "system", content: systemPrompt }
-    ];
+Your task is to analyze the provided document and extract expense details. Look for:
+- The name or description of the expense/service
+- The amount (convert to monthly if annual/quarterly/weekly)
+- The type/category of expense
 
-    // For images, use vision capabilities
-    if (mimeType?.startsWith('image/')) {
-      messages.push({
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: "Extract expense information from this document image. Look for the expense name, monthly amount, and category."
-          },
-          {
-            type: "image_url",
-            image_url: {
-              url: `data:${mimeType};base64,${fileBase64}`
-            }
-          }
-        ]
+Always return amounts in GBP (£). If you see a currency symbol or amount, convert it.
+
+IMPORTANT: You MUST call the extract_expense_info function with your findings. Even if you cannot find all information, make your best guess based on what you can see.`;
+
+    const userContent: any[] = [];
+    
+    if (isImage) {
+      // For images, send as vision request
+      userContent.push({
+        type: "text",
+        text: `Analyze this document image and extract the expense information. Look for the business/service name, payment amount, and what type of expense it is. Call the extract_expense_info function with your findings.
+
+Document filename: ${fileName}`
+      });
+      userContent.push({
+        type: "image_url",
+        image_url: {
+          url: `data:${mimeType};base64,${fileBase64}`
+        }
+      });
+    } else if (isPdf) {
+      // For PDFs, also try vision approach (Gemini can handle PDFs as images)
+      userContent.push({
+        type: "text",
+        text: `Analyze this PDF document and extract the expense information. Look for the business/service name, payment amount, and what type of expense it is. Call the extract_expense_info function with your findings.
+
+Document filename: ${fileName}`
+      });
+      userContent.push({
+        type: "image_url",
+        image_url: {
+          url: `data:application/pdf;base64,${fileBase64}`
+        }
       });
     } else {
-      // For PDFs and other documents, decode and send as text
-      // Note: For PDF parsing, we rely on the AI's ability to understand base64-encoded content
-      // or we can try to extract text if it's a text-based file
+      // For text files, try to decode
       let textContent = "";
-      
       try {
-        // Try to decode as text (works for .txt files)
         const binaryString = atob(fileBase64);
-        textContent = binaryString;
+        // Check if it's readable text
+        const isReadable = /^[\x20-\x7E\s]+$/.test(binaryString.substring(0, 100));
+        if (isReadable) {
+          textContent = binaryString;
+        } else {
+          textContent = `[Binary file: ${fileName}] - Cannot extract text directly`;
+        }
       } catch (e) {
-        // If it fails, it's likely a binary file like PDF
-        // Send as base64 with instructions
-        textContent = `[Document: ${fileName}]\nThis is a base64-encoded document. Please analyze the following encoded content and extract expense information:\n${fileBase64.substring(0, 5000)}...`;
+        textContent = `[File: ${fileName}] - Could not decode content`;
       }
 
-      // For PDFs and complex docs, use vision with the PDF converted to image data
-      if (mimeType === 'application/pdf' || fileName?.endsWith('.pdf')) {
-        messages.push({
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Extract expense information from this PDF document (${fileName}). Look for the expense name/description, monthly or regular payment amount, and appropriate category.`
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:${mimeType || 'application/pdf'};base64,${fileBase64}`
-              }
-            }
-          ]
-        });
-      } else {
-        messages.push({
-          role: "user",
-          content: `Extract expense information from this document:\n\nFile: ${fileName}\n\n${textContent}`
-        });
-      }
+      userContent.push({
+        type: "text",
+        text: `Extract expense information from this document content:
+
+Filename: ${fileName}
+
+Content:
+${textContent.substring(0, 10000)}
+
+Call the extract_expense_info function with the expense details you find.`
+      });
     }
+
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userContent }
+    ];
+
+    console.log("Sending request to AI gateway...");
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -114,17 +133,17 @@ Categories available: housing, utilities, groceries, transport, insurance, subsc
             type: "function",
             function: {
               name: "extract_expense_info",
-              description: "Extract structured expense information from a document",
+              description: "Extract structured expense information from a document. Call this function with the expense details found in the document.",
               parameters: {
                 type: "object",
                 properties: {
                   name: { 
                     type: "string", 
-                    description: "A descriptive name for this expense (e.g., 'Netflix Subscription', 'Electric Bill', 'Car Insurance')" 
+                    description: "A descriptive name for this expense (e.g., 'Netflix Subscription', 'Electric Bill', 'Car Insurance'). Use the business/provider name if visible." 
                   },
                   monthly_amount: { 
                     type: "number", 
-                    description: "Monthly amount in GBP. If the document shows annual/quarterly/weekly amounts, calculate the monthly equivalent." 
+                    description: "Monthly amount in GBP. If the document shows annual amount, divide by 12. If quarterly, divide by 3. If weekly, multiply by 4.33." 
                   },
                   category: { 
                     type: "string", 
@@ -150,6 +169,8 @@ Categories available: housing, utilities, groceries, transport, insurance, subsc
       }),
     });
 
+    console.log("AI gateway response status:", response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error("AI gateway error:", response.status, errorText);
@@ -168,26 +189,64 @@ Categories available: housing, utilities, groceries, transport, insurance, subsc
       }
       
       return new Response(
-        JSON.stringify({ error: "Failed to extract expense information" }),
+        JSON.stringify({ error: "Failed to extract expense information. The AI service returned an error." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const data = await response.json();
-    console.log("AI response:", JSON.stringify(data));
+    console.log("AI response received:", JSON.stringify(data, null, 2));
 
     // Extract the tool call result
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall || toolCall.function.name !== "extract_expense_info") {
-      console.error("No valid tool call in response");
+    const message = data.choices?.[0]?.message;
+    const toolCall = message?.tool_calls?.[0];
+    
+    if (!toolCall) {
+      console.error("No tool call in response. Message content:", message?.content);
+      
+      // Try to parse from content if tool call failed
+      if (message?.content) {
+        // Maybe the model returned JSON in content instead
+        try {
+          const parsed = JSON.parse(message.content);
+          if (parsed.name && parsed.monthly_amount) {
+            console.log("Parsed from content:", parsed);
+            return new Response(
+              JSON.stringify({ data: parsed }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        } catch {
+          // Not JSON
+        }
+      }
+      
       return new Response(
-        JSON.stringify({ error: "Could not extract information from document" }),
+        JSON.stringify({ error: "Could not extract information from document. Please try a clearer image or enter details manually." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const extractedInfo = JSON.parse(toolCall.function.arguments);
-    console.log("Extracted expense info:", extractedInfo);
+    if (toolCall.function.name !== "extract_expense_info") {
+      console.error("Unexpected function call:", toolCall.function.name);
+      return new Response(
+        JSON.stringify({ error: "Unexpected response from AI" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    let extractedInfo;
+    try {
+      extractedInfo = JSON.parse(toolCall.function.arguments);
+    } catch (parseErr) {
+      console.error("Failed to parse tool call arguments:", toolCall.function.arguments);
+      return new Response(
+        JSON.stringify({ error: "Failed to parse extraction results" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("Successfully extracted expense info:", extractedInfo);
 
     return new Response(
       JSON.stringify({ data: extractedInfo }),
