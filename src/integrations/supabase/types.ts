@@ -154,6 +154,7 @@ export type Database = {
           couples_mode: boolean
           created_at: string
           end_date: string | null
+          frequency: string
           id: string
           monthly_amount: number
           name: string
@@ -171,6 +172,7 @@ export type Database = {
           couples_mode?: boolean
           created_at?: string
           end_date?: string | null
+          frequency?: string
           id?: string
           monthly_amount?: number
           name: string
@@ -188,6 +190,7 @@ export type Database = {
           couples_mode?: boolean
           created_at?: string
           end_date?: string | null
+          frequency?: string
           id?: string
           monthly_amount?: number
           name?: string
