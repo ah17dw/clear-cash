@@ -77,6 +77,7 @@ export interface ExpenseItem {
   reminder_days_before?: number;
   start_date?: string | null;
   end_date?: string | null;
+  frequency?: 'monthly' | 'annual';
   created_at: string;
   updated_at: string;
 }

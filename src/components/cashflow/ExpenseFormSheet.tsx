@@ -33,6 +33,7 @@ const expenseSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   monthly_amount: z.coerce.number().min(0),
   category: z.string().optional(),
+  frequency: z.enum(['monthly', 'annual']).default('monthly'),
 });
 
 type ExpenseFormData = z.infer<typeof expenseSchema>;
@@ -51,6 +52,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
   const [isTemporary, setIsTemporary] = useState(false);
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
+  const [frequency, setFrequency] = useState<'monthly' | 'annual'>('monthly');
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -68,6 +70,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
       name: '',
       monthly_amount: 0,
       category: 'other',
+      frequency: 'monthly',
     },
   });
 
@@ -77,19 +80,23 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
         name: expense.name,
         monthly_amount: Number(expense.monthly_amount),
         category: expense.category ?? 'other',
+        frequency: expense.frequency ?? 'monthly',
       });
       setStartDate(expense.start_date ? new Date(expense.start_date) : undefined);
       setEndDate(expense.end_date ? new Date(expense.end_date) : undefined);
       setIsTemporary(!!(expense.start_date || expense.end_date));
+      setFrequency(expense.frequency ?? 'monthly');
     } else {
       reset({
         name: '',
         monthly_amount: 0,
         category: 'other',
+        frequency: 'monthly',
       });
       setStartDate(undefined);
       setEndDate(undefined);
       setIsTemporary(false);
+      setFrequency('monthly');
       setUploadedFile(null);
     }
   }, [expense, reset, open]);
@@ -162,6 +169,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
       name: data.name,
       monthly_amount: data.monthly_amount,
       category: data.category || null,
+      frequency: frequency,
       start_date: isTemporary && startDate ? format(startDate, 'yyyy-MM-dd') : null,
       end_date: isTemporary && endDate ? format(endDate, 'yyyy-MM-dd') : null,
     };
@@ -223,9 +231,28 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
 
+          {/* Frequency Selection */}
+          <div className="space-y-2">
+            <Label>Frequency</Label>
+            <Select
+              value={frequency}
+              onValueChange={(v: 'monthly' | 'annual') => setFrequency(v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="monthly">Monthly</SelectItem>
+                <SelectItem value="annual">Annual</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="monthly_amount">Monthly Amount *</Label>
+              <Label htmlFor="monthly_amount">
+                {frequency === 'annual' ? 'Annual Amount *' : 'Monthly Amount *'}
+              </Label>
               <Input
                 id="monthly_amount"
                 type="number"

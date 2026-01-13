@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownCircle, ArrowUpCircle, Plus, Trash2, Users, ArrowUpDown, ChevronRight, CalendarDays } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Plus, Trash2, Users, ArrowUpDown, ChevronRight, CalendarDays, CalendarClock } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
@@ -45,13 +45,30 @@ export default function Cashflow() {
 
   const totalIncome = income?.reduce((sum, i) => sum + Number(i.monthly_amount), 0) ?? 0;
   
+  // Split expenses by frequency
+  const { monthlyExpenses, annualExpenses } = useMemo(() => {
+    const monthly = expenses?.filter(e => e.frequency !== 'annual') ?? [];
+    const annual = expenses?.filter(e => e.frequency === 'annual') ?? [];
+    return { monthlyExpenses: monthly, annualExpenses: annual };
+  }, [expenses]);
+
   // Calculate adjusted expenses (per-item, persisted per expense)
-  const adjustedExpensesTotal = useMemo(() => {
-    return expenses?.reduce((sum, e) => {
+  const adjustedMonthlyExpensesTotal = useMemo(() => {
+    return monthlyExpenses.reduce((sum, e) => {
       const multiplier = e.couples_mode ? 0.5 : 1;
       return sum + Number(e.monthly_amount) * multiplier;
-    }, 0) ?? 0;
-  }, [expenses]);
+    }, 0);
+  }, [monthlyExpenses]);
+
+  const adjustedAnnualExpensesTotal = useMemo(() => {
+    return annualExpenses.reduce((sum, e) => {
+      const multiplier = e.couples_mode ? 0.5 : 1;
+      return sum + Number(e.monthly_amount) * multiplier;
+    }, 0);
+  }, [annualExpenses]);
+
+  // Monthly equivalent of annual expenses
+  const annualAsMonthly = adjustedAnnualExpensesTotal / 12;
 
   // Debt payments are never 50%
   const adjustedDebtPaymentsTotal = useMemo(() => {
@@ -61,20 +78,27 @@ export default function Cashflow() {
     }, 0) ?? 0;
   }, [debts]);
 
-  const totalOutgoings = adjustedExpensesTotal + adjustedDebtPaymentsTotal;
-  const surplus = totalIncome - totalOutgoings;
+  const totalMonthlyOutgoings = adjustedMonthlyExpensesTotal + adjustedDebtPaymentsTotal + annualAsMonthly;
+  const surplus = totalIncome - totalMonthlyOutgoings;
 
   // Sorted expenses
-  const sortedExpenses = useMemo(() => {
-    if (!expenses) return [];
-    return [...expenses].sort((a, b) => {
+  const sortedMonthlyExpenses = useMemo(() => {
+    return [...monthlyExpenses].sort((a, b) => {
       if (sortBy === 'value') {
         return Number(b.monthly_amount) - Number(a.monthly_amount);
       }
-      // Sort by due - no payment_day on expenses, so just alphabetical as fallback
       return a.name.localeCompare(b.name);
     });
-  }, [expenses, sortBy]);
+  }, [monthlyExpenses, sortBy]);
+
+  const sortedAnnualExpenses = useMemo(() => {
+    return [...annualExpenses].sort((a, b) => {
+      if (sortBy === 'value') {
+        return Number(b.monthly_amount) - Number(a.monthly_amount);
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [annualExpenses, sortBy]);
 
   // Sorted debts
   const sortedDebts = useMemo(() => {
@@ -88,7 +112,6 @@ export default function Cashflow() {
         const bPayment = Number(b.planned_payment) || Number(b.minimum_payment);
         return bPayment - aPayment;
       }
-      // Sort by days until next payment
       const aDays = a.payment_day ? (a.payment_day >= currentDay ? a.payment_day - currentDay : 30 - currentDay + a.payment_day) : 999;
       const bDays = b.payment_day ? (b.payment_day >= currentDay ? b.payment_day - currentDay : 30 - currentDay + b.payment_day) : 999;
       return aDays - bDays;
@@ -111,6 +134,76 @@ export default function Cashflow() {
     navigate(`/debts/${debtId}`);
   };
 
+  const renderExpenseItem = (expense: ExpenseItem, isAnnual: boolean = false) => {
+    const fullAmount = Number(expense.monthly_amount);
+    const isCouples = !!expense.couples_mode;
+    const displayAmount = fullAmount * (isCouples ? 0.5 : 1);
+    const subCount = getSubExpenseCount(expense.id);
+    
+    return (
+      <div
+        key={expense.id}
+        className="flex items-center justify-between py-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 rounded transition-colors"
+        onDoubleClick={() => { setEditingExpense(expense); setShowExpenseForm(true); }}
+      >
+        <div 
+          className="flex items-center gap-3 flex-1 cursor-pointer"
+          onClick={() => {
+            setSelectedExpenseForSub(expense);
+            setShowSubExpenseSheet(true);
+          }}
+        >
+          <div className="w-8 h-8 rounded-full bg-debt/20 flex items-center justify-center text-debt font-semibold text-sm">
+            {getInitialIcon(expense.name)}
+          </div>
+          <div>
+            <p className="text-sm flex items-center gap-1">
+              {expense.name}
+              {subCount > 0 && (
+                <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
+                  {subCount} sub
+                </span>
+              )}
+              <ChevronRight className="h-3 w-3 text-muted-foreground" />
+            </p>
+            <p className="text-xs text-muted-foreground">{getCategoryLabel(expense.category)}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="text-right">
+            <AmountDisplay amount={displayAmount} size="sm" />
+            {isCouples && (
+              <p className="text-[10px] text-muted-foreground line-through">
+                £{fullAmount.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </p>
+            )}
+            {isAnnual && (
+              <p className="text-[10px] text-muted-foreground">
+                £{(displayAmount / 12).toFixed(0)}/mo
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <Users className="h-3 w-3 text-muted-foreground" />
+            <Switch
+              checked={isCouples}
+              onCheckedChange={(checked) => updateExpense.mutate({ id: expense.id, couples_mode: checked })}
+              className="scale-75"
+            />
+          </div>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 text-debt"
+            onClick={() => deleteExpense.mutate(expense.id)}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="page-container">
       <PageHeader title="Cashflow" />
@@ -125,7 +218,8 @@ export default function Cashflow() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">Outgoings</p>
-              <AmountDisplay amount={totalOutgoings} size="sm" className="text-debt" />
+              <AmountDisplay amount={totalMonthlyOutgoings} size="sm" className="text-debt" />
+              <p className="text-[10px] text-muted-foreground">/month</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">
@@ -216,7 +310,7 @@ export default function Cashflow() {
 
       {/* Outgoings Header with Sort */}
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold">Monthly Outgoings</h2>
+        <h2 className="text-lg font-semibold">Outgoings</h2>
         <Button
           size="sm"
           variant="outline"
@@ -228,12 +322,12 @@ export default function Cashflow() {
         </Button>
       </div>
 
-      {/* Expenses Section */}
+      {/* Monthly Expenses Section */}
       <div className="finance-card mb-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <ArrowUpCircle className="h-4 w-4 text-debt" />
-            <h3 className="font-medium">Expenses</h3>
+            <h3 className="font-medium">Monthly Expenses</h3>
           </div>
           <Button
             size="sm"
@@ -247,79 +341,55 @@ export default function Cashflow() {
           </Button>
         </div>
 
-        {sortedExpenses.length > 0 ? (
+        {sortedMonthlyExpenses.length > 0 ? (
           <div className="space-y-2">
-            {sortedExpenses.map((expense) => {
-              const fullAmount = Number(expense.monthly_amount);
-              const isCouples = !!expense.couples_mode;
-              const displayAmount = fullAmount * (isCouples ? 0.5 : 1);
-              const subCount = getSubExpenseCount(expense.id);
-              return (
-                <div
-                  key={expense.id}
-                  className="flex items-center justify-between py-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 rounded transition-colors"
-                  onDoubleClick={() => { setEditingExpense(expense); setShowExpenseForm(true); }}
-                >
-                  <div 
-                    className="flex items-center gap-3 flex-1 cursor-pointer"
-                    onClick={() => {
-                      setSelectedExpenseForSub(expense);
-                      setShowSubExpenseSheet(true);
-                    }}
-                  >
-                    <div className="w-8 h-8 rounded-full bg-debt/20 flex items-center justify-center text-debt font-semibold text-sm">
-                      {getInitialIcon(expense.name)}
-                    </div>
-                    <div>
-                      <p className="text-sm flex items-center gap-1">
-                        {expense.name}
-                        {subCount > 0 && (
-                          <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
-                            {subCount} sub
-                          </span>
-                        )}
-                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                      </p>
-                      <p className="text-xs text-muted-foreground">{getCategoryLabel(expense.category)}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="text-right">
-                      <AmountDisplay amount={displayAmount} size="sm" />
-                      {isCouples && (
-                        <p className="text-[10px] text-muted-foreground line-through">
-                          £{fullAmount.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Users className="h-3 w-3 text-muted-foreground" />
-                      <Switch
-                        checked={isCouples}
-                        onCheckedChange={(checked) => updateExpense.mutate({ id: expense.id, couples_mode: checked })}
-                        className="scale-75"
-                      />
-                    </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 text-debt"
-                      onClick={() => deleteExpense.mutate(expense.id)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
+            {sortedMonthlyExpenses.map((expense) => renderExpenseItem(expense, false))}
             <div className="flex items-center justify-between pt-2 font-medium">
               <p>Subtotal</p>
-              <AmountDisplay amount={adjustedExpensesTotal} size="sm" />
+              <AmountDisplay amount={adjustedMonthlyExpensesTotal} size="sm" />
             </div>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground text-center py-4">
-            No expenses added
+            No monthly expenses added
+          </p>
+        )}
+      </div>
+
+      {/* Annual Expenses Section */}
+      <div className="finance-card mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="h-4 w-4 text-debt" />
+            <h3 className="font-medium">Annual Expenses</h3>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setEditingExpense(undefined);
+              setShowExpenseForm(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {sortedAnnualExpenses.length > 0 ? (
+          <div className="space-y-2">
+            {sortedAnnualExpenses.map((expense) => renderExpenseItem(expense, true))}
+            <div className="flex items-center justify-between pt-2 font-medium border-t border-border">
+              <p>Subtotal (Annual)</p>
+              <AmountDisplay amount={adjustedAnnualExpensesTotal} size="sm" />
+            </div>
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <p>Monthly equivalent</p>
+              <p>£{annualAsMonthly.toFixed(2)}/mo</p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            No annual expenses added
           </p>
         )}
       </div>
