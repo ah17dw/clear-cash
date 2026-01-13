@@ -255,12 +255,29 @@ export default function Debts() {
                   className="w-full finance-card flex gap-2 list-item-interactive animate-fade-in overflow-hidden text-left"
                   style={{ animationDelay: `${index * 30}ms` }}
                 >
-                  {/* Vertical progress bar showing % of total debt */}
-                  <div className="w-1 self-stretch bg-muted rounded-full overflow-hidden flex-shrink-0">
-                    <div 
-                      className="w-full bg-debt rounded-full transition-all duration-300"
-                      style={{ height: `${Math.min(debtPercentage, 100)}%` }}
-                    />
+                  {/* Mini pie chart showing % of total debt */}
+                  <div className="flex-shrink-0 self-center">
+                    <svg width="24" height="24" viewBox="0 0 24 24" className="transform -rotate-90">
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        fill="none"
+                        stroke="hsl(var(--muted))"
+                        strokeWidth="4"
+                      />
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        fill="none"
+                        stroke="hsl(var(--debt))"
+                        strokeWidth="4"
+                        strokeDasharray={`${(debtPercentage / 100) * 62.83} 62.83`}
+                        strokeLinecap="round"
+                        className="transition-all duration-300"
+                      />
+                    </svg>
                   </div>
                   
                   <div className="flex-1 flex flex-col gap-2">
