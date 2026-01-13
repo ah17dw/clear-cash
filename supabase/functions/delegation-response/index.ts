@@ -6,7 +6,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const htmlHeaders = {
+  "Content-Type": "text/html; charset=utf-8",
+  ...corsHeaders,
+};
+
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -16,17 +22,24 @@ serve(async (req) => {
     const token = url.searchParams.get("token");
     const response = url.searchParams.get("response");
 
+    console.log("delegation-response request", {
+      method: req.method,
+      token_present: !!token,
+      response,
+      user_agent: req.headers.get("user-agent") ?? "",
+    });
+
     if (!token || !response) {
       return new Response(renderHtml("Missing required parameters", false), {
         status: 400,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+        headers: htmlHeaders,
       });
     }
 
     if (!["accepted", "rejected"].includes(response)) {
       return new Response(renderHtml("Invalid response value", false), {
         status: 400,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+        headers: htmlHeaders,
       });
     }
 
@@ -34,10 +47,10 @@ serve(async (req) => {
     const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
     if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error("Missing backend env vars");
+      console.error("delegation-response missing backend env vars");
       return new Response(renderHtml("Backend not configured", false), {
         status: 500,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+        headers: htmlHeaders,
       });
     }
 
@@ -53,19 +66,26 @@ serve(async (req) => {
       .maybeSingle();
 
     if (findErr || !delegationRecord) {
-      console.error("Token lookup failed", findErr);
+      console.error("delegation-response token lookup failed", { findErr });
       return new Response(renderHtml("Invalid or expired link", false), {
         status: 404,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+        headers: htmlHeaders,
       });
     }
 
     // Check if already responded
     if (delegationRecord.responded_at) {
-      return new Response(renderHtml("You have already responded to this task", true, response === "accepted"), {
-        status: 200,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-      });
+      return new Response(
+        renderHtml(
+          "You have already responded to this task",
+          true,
+          response === "accepted"
+        ),
+        {
+          status: 200,
+          headers: htmlHeaders,
+        }
+      );
     }
 
     // Update the delegation response record
@@ -78,45 +98,49 @@ serve(async (req) => {
       .eq("id", delegationRecord.id);
 
     if (updateDelegationErr) {
-      console.error("Delegation update failed", updateDelegationErr);
+      console.error("delegation-response delegation update failed", updateDelegationErr);
+      return new Response(renderHtml("Failed to record your response", false), {
+        status: 500,
+        headers: htmlHeaders,
+      });
     }
 
-    // Update the task's delegation status
+    // Update the task's delegation status (and clear token so the same token can't be reused)
     const { error: updateTaskErr } = await admin
       .from("tasks")
       .update({
         delegation_status: response,
         delegation_responded_at: new Date().toISOString(),
+        delegation_token: null,
       })
       .eq("id", delegationRecord.task_id);
 
     if (updateTaskErr) {
-      console.error("Task update failed", updateTaskErr);
+      console.error("delegation-response task update failed", updateTaskErr);
       return new Response(renderHtml("Failed to update task", false), {
         status: 500,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+        headers: htmlHeaders,
       });
     }
 
     const isAccepted = response === "accepted";
-    console.log(`Task ${delegationRecord.task_id} delegation ${response}`);
+    console.log("delegation-response updated", {
+      task_id: delegationRecord.task_id,
+      response,
+    });
 
     return new Response(
-      renderHtml(
-        isAccepted ? "Task Accepted!" : "Task Declined",
-        true,
-        isAccepted
-      ),
+      renderHtml(isAccepted ? "Task Accepted!" : "Task Declined", true, isAccepted),
       {
         status: 200,
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+        headers: htmlHeaders,
       }
     );
   } catch (error) {
     console.error("Error in delegation-response", error);
     return new Response(renderHtml("An error occurred", false), {
       status: 500,
-      headers: { "Content-Type": "text/html; charset=utf-8" },
+      headers: htmlHeaders,
     });
   }
 });
@@ -124,11 +148,7 @@ serve(async (req) => {
 function renderHtml(message: string, success: boolean, accepted?: boolean): string {
   const bgColor = success ? (accepted ? "#dcfce7" : "#fef2f2") : "#fef2f2";
   const iconColor = success ? (accepted ? "#22c55e" : "#ef4444") : "#ef4444";
-  const icon = success
-    ? accepted
-      ? "✓"
-      : "✕"
-    : "⚠";
+  const icon = success ? (accepted ? "✓" : "✕") : "⚠";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -152,7 +172,7 @@ function renderHtml(message: string, success: boolean, accepted?: boolean): stri
       border-radius: 16px;
       padding: 40px;
       text-align: center;
-      max-width: 400px;
+      max-width: 420px;
       box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
     }
     .icon {
@@ -187,3 +207,4 @@ function renderHtml(message: string, success: boolean, accepted?: boolean): stri
 </body>
 </html>`;
 }
+

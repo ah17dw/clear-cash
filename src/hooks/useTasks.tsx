@@ -45,6 +45,10 @@ export function useTasks() {
       return data as Task[];
     },
     enabled: !!user,
+    // Delegation accept/decline happens outside the app (via email link), so we poll briefly
+    // to reflect updated delegation_status without requiring a manual refresh.
+    refetchInterval: user ? 5000 : false,
+    refetchIntervalInBackground: true,
   });
 }
 
