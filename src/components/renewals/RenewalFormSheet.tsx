@@ -5,8 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -14,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CalendarIcon, Upload, Sparkles, Loader2, FileText, Trash2, ExternalLink } from 'lucide-react';
+import { Sparkles, Loader2, FileText, Trash2, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useCreateRenewal, useUpdateRenewal, useExtractContract, useRenewalFiles, useAddRenewalFile, useDeleteRenewalFile, getSignedFileUrl, Renewal } from '@/hooks/useRenewals';
@@ -421,47 +419,30 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Agreement Start</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn('w-full justify-start', !agreementStart && 'text-muted-foreground')}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {agreementStart ? format(agreementStart, 'dd/MM/yyyy') : 'Select date'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={agreementStart}
-                      onSelect={setAgreementStart}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                <Input
+                  type="date"
+                  value={agreementStart ? format(agreementStart, 'yyyy-MM-dd') : ''}
+                  onChange={(e) => {
+                    const date = e.target.value ? new Date(e.target.value) : undefined;
+                    setAgreementStart(date);
+                    // Auto-set end date to 364 days after start
+                    if (date && !agreementEnd) {
+                      const endDate = new Date(date);
+                      endDate.setDate(endDate.getDate() + 364);
+                      setAgreementEnd(endDate);
+                    }
+                  }}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Agreement End</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn('w-full justify-start', !agreementEnd && 'text-muted-foreground')}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {agreementEnd ? format(agreementEnd, 'dd/MM/yyyy') : 'Select date'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={agreementEnd}
-                      onSelect={setAgreementEnd}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                <Input
+                  type="date"
+                  value={agreementEnd ? format(agreementEnd, 'yyyy-MM-dd') : ''}
+                  onChange={(e) => {
+                    setAgreementEnd(e.target.value ? new Date(e.target.value) : undefined);
+                  }}
+                />
               </div>
             </div>
 
