@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon, Trash2, UserPlus, Search } from 'lucide-react';
+import { Trash2, UserPlus, Search, User, Mail, Check } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -12,8 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -21,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { useCreateTask, useUpdateTask, useDeleteTask, useAddTaskTag, useTaskTags, Task } from '@/hooks/useTasks';
 import { useSearchProfiles } from '@/hooks/useProfiles';
 import { cn } from '@/lib/utils';
@@ -33,6 +32,19 @@ interface TaskFormSheetProps {
   task?: Task | null;
 }
 
+// Predefined household members - could come from settings/database
+const HOUSEHOLD_MEMBERS = [
+  { email: 'alex@hayesalex.com', name: 'Alex', color: 'bg-blue-500' },
+  { email: 'bill@example.com', name: 'Bill', color: 'bg-green-500' },
+  { email: 'nan@example.com', name: 'Nan', color: 'bg-purple-500' },
+];
+
+const PRIORITY_OPTIONS = [
+  { value: 'low', label: 'Low', color: 'text-savings' },
+  { value: 'medium', label: 'Medium', color: 'text-amber-500' },
+  { value: 'high', label: 'High', color: 'text-debt' },
+];
+
 export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) {
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
@@ -40,13 +52,13 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
   const addTaskTag = useAddTaskTag();
   const { data: tags } = useTaskTags(task?.id ?? '');
 
-  const [userSearch, setUserSearch] = useState('');
-  const { data: searchResults, isLoading: isSearching } = useSearchProfiles(userSearch);
+  const [showEmailInput, setShowEmailInput] = useState(false);
+  const [customEmail, setCustomEmail] = useState('');
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [startDate, setStartDate] = useState<Date | undefined>();
-  const [dueDate, setDueDate] = useState<Date | undefined>();
+  const [startDate, setStartDate] = useState('');
+  const [dueDate, setDueDate] = useState('');
   const [dueTime, setDueTime] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [repeatType, setRepeatType] = useState<string>('none');
@@ -56,9 +68,9 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
     if (task) {
       setTitle(task.title);
       setDescription(task.description || '');
-      setStartDate(task.start_date ? new Date(task.start_date) : undefined);
-      setDueDate(task.due_date ? new Date(task.due_date) : undefined);
-      setDueTime(task.due_time || '');
+      setStartDate(task.start_date || '');
+      setDueDate(task.due_date || '');
+      setDueTime(task.due_time?.slice(0, 5) || '');
       setPriority(task.priority);
       setRepeatType(task.repeat_type || 'none');
       setAutoComplete(task.auto_complete);
@@ -70,13 +82,14 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
   const resetForm = () => {
     setTitle('');
     setDescription('');
-    setStartDate(undefined);
-    setDueDate(undefined);
+    setStartDate('');
+    setDueDate('');
     setDueTime('');
     setPriority('medium');
     setRepeatType('none');
     setAutoComplete(false);
-    setUserSearch('');
+    setCustomEmail('');
+    setShowEmailInput(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -91,8 +104,8 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
     const taskData = {
       title: title.trim(),
       description: description.trim() ? description.trim() : null,
-      start_date: startDate ? format(startDate, 'yyyy-MM-dd') : null,
-      due_date: dueDate ? format(dueDate, 'yyyy-MM-dd') : null,
+      start_date: startDate || null,
+      due_date: dueDate || null,
       due_time: normalizedDueTime,
       priority,
       repeat_type: repeatType as 'daily' | 'weekly' | 'monthly' | 'none',
@@ -123,40 +136,36 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
     }
   };
 
-  const handleSelectUser = async (profile: { user_id: string; display_name: string | null }) => {
+  const handleAssignMember = async (email: string) => {
     if (!task) {
-      toast.info('Save the task first, then you can tag users');
+      toast.info('Save the task first to assign someone');
       return;
     }
-    
-    // We need to get the email for this user - for now we'll use display_name as a placeholder
-    // In a real app, we'd query the email or store it in profiles
-    // For now, we'll ask for email input but show the display_name in search
-    const email = prompt(`Enter email for ${profile.display_name || 'this user'}:`);
-    if (!email) return;
+
+    // Check if already tagged
+    if (tags?.some(t => t.tagged_email === email)) {
+      toast.info('This person is already assigned');
+      return;
+    }
 
     await addTaskTag.mutateAsync({ taskId: task.id, taggedEmail: email });
-    setUserSearch('');
   };
 
-  const handleTagByEmail = async () => {
-    if (!task) {
-      toast.info('Save the task first, then you can tag users');
-      return;
-    }
-
-    const email = userSearch.trim();
-    if (!email) return;
-
-    const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const handleCustomEmailAssign = async () => {
+    if (!customEmail.trim()) return;
+    
+    const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customEmail);
     if (!isValid) {
       toast.error('Please enter a valid email address');
       return;
     }
 
-    await addTaskTag.mutateAsync({ taskId: task.id, taggedEmail: email });
-    setUserSearch('');
+    await handleAssignMember(customEmail);
+    setCustomEmail('');
+    setShowEmailInput(false);
   };
+
+  const isTagged = (email: string) => tags?.some(t => t.tagged_email === email);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -166,127 +175,104 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+          {/* Title */}
           <div className="space-y-2">
-            <Label htmlFor="title">Title</Label>
+            <Label htmlFor="title">Task Name *</Label>
             <Input
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Task title"
+              placeholder="What needs to be done?"
               required
+              className="text-base"
             />
           </div>
 
+          {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">Details</Label>
             <Textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Task description (optional)"
-              rows={3}
+              placeholder="Add more details..."
+              rows={2}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Start Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      'w-full justify-start text-left font-normal',
-                      !startDate && 'text-muted-foreground'
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {startDate ? format(startDate, 'MMM d, yyyy') : 'Pick date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={startDate}
-                    onSelect={setStartDate}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Due Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      'w-full justify-start text-left font-normal',
-                      !dueDate && 'text-muted-foreground'
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dueDate ? format(dueDate, 'MMM d, yyyy') : 'Pick date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={dueDate}
-                    onSelect={setDueDate}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+          {/* Priority Selection */}
+          <div className="space-y-2">
+            <Label>Priority</Label>
+            <div className="flex gap-2">
+              {PRIORITY_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setPriority(opt.value as 'low' | 'medium' | 'high')}
+                  className={cn(
+                    "flex-1 py-2 px-3 rounded-lg border-2 text-sm font-medium transition-all",
+                    priority === opt.value 
+                      ? "border-primary bg-primary/10" 
+                      : "border-border hover:border-primary/50"
+                  )}
+                >
+                  <span className={opt.color}>{opt.label}</span>
+                </button>
+              ))}
             </div>
           </div>
 
+          {/* Dates */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="dueTime">Due Time</Label>
+              <Label>Start Date</Label>
               <Input
-                id="dueTime"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Due Date</Label>
+              <Input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Time & Repeat */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Due Time</Label>
+              <Input
                 type="time"
                 value={dueTime}
                 onChange={(e) => setDueTime(e.target.value)}
               />
             </div>
-
             <div className="space-y-2">
-              <Label>Priority</Label>
-              <Select value={priority} onValueChange={(v) => setPriority(v as 'low' | 'medium' | 'high')}>
+              <Label>Repeat</Label>
+              <Select value={repeatType} onValueChange={setRepeatType}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="none">Don't repeat</SelectItem>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Repeat</Label>
-            <Select value={repeatType} onValueChange={setRepeatType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Don't repeat</SelectItem>
-                <SelectItem value="daily">Daily</SelectItem>
-                <SelectItem value="weekly">Weekly</SelectItem>
-                <SelectItem value="monthly">Monthly</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center justify-between py-2">
+          {/* Auto Complete */}
+          <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/50">
             <div>
               <p className="font-medium text-sm">Auto-complete</p>
-              <p className="text-xs text-muted-foreground">Mark as done automatically</p>
+              <p className="text-xs text-muted-foreground">Mark done at due time</p>
             </div>
             <Switch
               checked={autoComplete}
@@ -294,92 +280,133 @@ export function TaskFormSheet({ open, onOpenChange, task }: TaskFormSheetProps) 
             />
           </div>
 
-          {/* User Tagging Section */}
-          <div className="space-y-2 border-t pt-4">
+          {/* Assign to Household Members */}
+          <div className="space-y-3 border-t pt-4">
             <Label className="flex items-center gap-2">
               <UserPlus className="h-4 w-4" />
-              Delegate to User
+              Assign To
             </Label>
 
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={userSearch}
-                onChange={(e) => setUserSearch(e.target.value)}
-                placeholder="Search by name or enter email..."
-                className="pl-9"
-              />
+            {/* Quick Select Household Members */}
+            <div className="flex flex-wrap gap-2">
+              {HOUSEHOLD_MEMBERS.map(member => {
+                const tagged = isTagged(member.email);
+                return (
+                  <button
+                    key={member.email}
+                    type="button"
+                    onClick={() => handleAssignMember(member.email)}
+                    disabled={!task || tagged}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-full border transition-all",
+                      tagged 
+                        ? "bg-primary/10 border-primary" 
+                        : "hover:border-primary/50 hover:bg-muted/50",
+                      !task && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className={cn("text-xs text-white", member.color)}>
+                        {member.name.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium">{member.name}</span>
+                    {tagged && <Check className="h-3 w-3 text-primary" />}
+                  </button>
+                );
+              })}
+
+              {/* Add Other Button */}
+              <button
+                type="button"
+                onClick={() => setShowEmailInput(!showEmailInput)}
+                disabled={!task}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded-full border border-dashed transition-all",
+                  "hover:border-primary/50 hover:bg-muted/50",
+                  !task && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Other...</span>
+              </button>
             </div>
 
-            {/* Search Results */}
-            {userSearch.length >= 2 && (
-              <div className="border rounded-md divide-y max-h-32 overflow-y-auto">
-                {isSearching ? (
-                  <p className="text-xs text-muted-foreground p-2">Searching...</p>
-                ) : searchResults && searchResults.length > 0 ? (
-                  searchResults.map((profile) => (
-                    <button
-                      key={profile.user_id}
-                      type="button"
-                      className="w-full text-left p-2 hover:bg-muted text-sm flex items-center gap-2"
-                      onClick={() => handleSelectUser(profile)}
-                    >
-                      <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium">
-                        {(profile.display_name || '?').charAt(0).toUpperCase()}
-                      </div>
-                      {profile.display_name || 'Unknown User'}
-                    </button>
-                  ))
-                ) : (
-                  <div className="p-2">
-                    <p className="text-xs text-muted-foreground mb-2">No users found. Tag by email?</p>
-                    {/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userSearch) && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleTagByEmail}
-                        className="w-full"
-                      >
-                        Tag {userSearch}
-                      </Button>
-                    )}
-                  </div>
-                )}
+            {/* Custom Email Input */}
+            {showEmailInput && task && (
+              <div className="flex gap-2">
+                <Input
+                  type="email"
+                  value={customEmail}
+                  onChange={(e) => setCustomEmail(e.target.value)}
+                  placeholder="email@example.com"
+                  className="flex-1"
+                />
+                <Button 
+                  type="button" 
+                  size="sm" 
+                  onClick={handleCustomEmailAssign}
+                  disabled={addTaskTag.isPending}
+                >
+                  Send
+                </Button>
               </div>
             )}
 
-            {/* Existing Tags */}
+            {/* Already Assigned */}
             {tags && tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {tags.map((t) => (
-                  <Badge key={t.id} variant="secondary">
-                    {t.tagged_email}
-                  </Badge>
-                ))}
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Assigned:</p>
+                <div className="flex flex-wrap gap-2">
+                  {tags.map(t => (
+                    <Badge key={t.id} variant="secondary" className="text-xs">
+                      {t.tagged_email}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             )}
 
             {!task && (
               <p className="text-xs text-muted-foreground">
-                Save the task first to tag users.
+                💡 Save the task first to assign household members. They'll receive an email to accept or decline.
               </p>
+            )}
+
+            {/* Delegation Status */}
+            {task && task.delegation_status !== 'none' && (
+              <div className={cn(
+                "p-3 rounded-lg text-sm",
+                task.delegation_status === 'pending' && "bg-amber-500/10 text-amber-600",
+                task.delegation_status === 'accepted' && "bg-savings/10 text-savings",
+                task.delegation_status === 'rejected' && "bg-debt/10 text-debt",
+              )}>
+                {task.delegation_status === 'pending' && '⏳ Awaiting response from assigned person'}
+                {task.delegation_status === 'accepted' && '✓ Task accepted'}
+                {task.delegation_status === 'rejected' && '✕ Task was declined'}
+              </div>
             )}
           </div>
 
-          <div className="flex gap-2 pt-4">
+          {/* Actions */}
+          <div className="flex gap-2 pt-4 border-t">
             {task && (
               <Button
                 type="button"
                 variant="destructive"
+                size="sm"
                 onClick={handleDelete}
-                className="gap-2"
+                className="gap-1"
               >
                 <Trash2 className="h-4 w-4" />
                 Delete
               </Button>
             )}
-            <Button type="submit" className="flex-1" disabled={createTask.isPending || updateTask.isPending}>
+            <Button 
+              type="submit" 
+              className="flex-1" 
+              disabled={createTask.isPending || updateTask.isPending || !title.trim()}
+            >
               {task ? 'Save Changes' : 'Create Task'}
             </Button>
           </div>
