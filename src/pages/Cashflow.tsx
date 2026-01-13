@@ -342,9 +342,13 @@ export default function Cashflow() {
                 </div>
               </SwipeableRow>
             ))}
-            <div className="flex items-center justify-between pt-2 font-medium">
-              <p>Total</p>
+            <div className="flex items-center justify-between pt-2 font-medium border-t border-border">
+              <p>Subtotal</p>
               <AmountDisplay amount={totalIncome} size="sm" className="text-savings" />
+            </div>
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <p>Annual equivalent</p>
+              <p>£{(totalIncome * 12).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/yr</p>
             </div>
           </div>
         ) : (
@@ -390,9 +394,13 @@ export default function Cashflow() {
         {sortedMonthlyExpenses.length > 0 ? (
           <div className="space-y-1">
             {sortedMonthlyExpenses.map((expense) => renderExpenseItem(expense, false))}
-            <div className="flex items-center justify-between pt-2 font-medium">
+            <div className="flex items-center justify-between pt-2 font-medium border-t border-border">
               <p>Subtotal</p>
               <AmountDisplay amount={adjustedMonthlyExpensesTotal} size="sm" />
+            </div>
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <p>Annual equivalent</p>
+              <p>£{(adjustedMonthlyExpensesTotal * 12).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/yr</p>
             </div>
           </div>
         ) : (
@@ -480,9 +488,13 @@ export default function Cashflow() {
                 </div>
               );
             })}
-            <div className="flex items-center justify-between pt-2 font-medium">
+            <div className="flex items-center justify-between pt-2 font-medium border-t border-border">
               <p>Subtotal</p>
               <AmountDisplay amount={adjustedDebtPaymentsTotal} size="sm" />
+            </div>
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <p>Annual equivalent</p>
+              <p>£{(adjustedDebtPaymentsTotal * 12).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/yr</p>
             </div>
           </div>
         </div>
