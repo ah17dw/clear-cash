@@ -280,9 +280,13 @@ serve(async (req) => {
     });
 
     // Build confirm/decline URLs - these will be handled by an edge function
+    // NOTE: in HTML attributes, '&' should be escaped as '&amp;' otherwise some email clients truncate the URL.
     const baseUrl = supabaseUrl.replace('/rest/v1', '');
     const confirmUrl = `${baseUrl}/functions/v1/delegation-response?token=${delegationToken}&response=accepted`;
     const declineUrl = `${baseUrl}/functions/v1/delegation-response?token=${delegationToken}&response=rejected`;
+
+    const confirmHref = confirmUrl.replace(/&/g, "&amp;");
+    const declineHref = declineUrl.replace(/&/g, "&amp;");
 
     const htmlParts = [
       `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">`,
@@ -293,11 +297,14 @@ serve(async (req) => {
       task.due_date ? `<p style="color: #888; font-size: 14px; margin: 0;"><strong>Due:</strong> ${task.due_date}${task.due_time ? ` at ${task.due_time}` : ""}</p>` : "",
       `</div>`,
       `<p style="color: #666; margin-bottom: 20px;">Please respond to confirm or decline this task:</p>`,
-      `<div style="margin-bottom: 30px;">`,
-      `<a href="${confirmUrl}" style="display: inline-block; background: #22c55e; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; margin-right: 10px; font-weight: 500;">✓ Accept Task</a>`,
-      `<a href="${declineUrl}" style="display: inline-block; background: #ef4444; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 500;">✕ Decline Task</a>`,
+      `<div style="margin-bottom: 16px;">`,
+      `<a href="${confirmHref}" style="display: inline-block; background: #22c55e; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; margin-right: 10px; font-weight: 500;">✓ Accept Task</a>`,
+      `<a href="${declineHref}" style="display: inline-block; background: #ef4444; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 500;">✕ Decline Task</a>`,
       `</div>`,
-      `<p style="color: #999; font-size: 12px;">If your email client supports it, you can also add the attached calendar invite.</p>`,
+      `<p style="color: #999; font-size: 12px; margin: 0;">If the buttons don't work, use these links:</p>`,
+      `<p style="color: #666; font-size: 12px; margin: 8px 0 0;">Accept: <a href="${confirmHref}">${confirmUrl}</a></p>`,
+      `<p style="color: #666; font-size: 12px; margin: 4px 0 0;">Decline: <a href="${declineHref}">${declineUrl}</a></p>`,
+      `<p style="color: #999; font-size: 12px; margin-top: 18px;">If your email client supports it, you can also add the attached calendar invite.</p>`,
       `</div>`,
     ].filter(Boolean);
 

@@ -22,18 +22,31 @@ import {
 export default function SavingsDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { data: account, isLoading } = useSavingsAccount(id!);
+  const { data: account, isLoading, error } = useSavingsAccount(id!);
   const deleteSavings = useDeleteSavingsAccount();
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
-  if (isLoading || !account) {
+  if (isLoading) {
     return (
       <div className="page-container">
         <PageHeader title="Loading..." showBack />
         <div className="animate-pulse space-y-4">
           <div className="h-24 bg-muted rounded-xl" />
           <div className="h-48 bg-muted rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !account) {
+    return (
+      <div className="page-container">
+        <PageHeader title="Savings" showBack />
+        <div className="finance-card p-4">
+          <p className="font-medium">Couldn’t load that savings account.</p>
+          <p className="text-sm text-muted-foreground mt-1">It may have been deleted, or you may not have access.</p>
+          <Button className="mt-4" variant="outline" onClick={() => navigate('/savings')}>Back to Savings</Button>
         </div>
       </div>
     );

@@ -184,15 +184,16 @@ export function useSavingsAccount(id: string) {
   const { user } = useAuth();
   
   return useQuery({
-    queryKey: ['savingsAccount', id],
+    queryKey: ['savingsAccount', id, user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('savings_accounts')
         .select('*')
         .eq('id', id)
-        .single();
+        .maybeSingle();
       
       if (error) throw error;
+      if (!data) throw new Error('Savings account not found');
       return data as SavingsAccount;
     },
     enabled: !!user && !!id,

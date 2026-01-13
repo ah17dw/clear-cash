@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Plus, Calendar, Clock, Flag, Repeat, CheckCircle2, History, AlertTriangle, CalendarDays, Check, X, HelpCircle } from 'lucide-react';
-import { format, isToday, isThisWeek, isThisMonth, parseISO, isPast, differenceInDays } from 'date-fns';
+import { format, isToday, isThisWeek, isThisMonth, parseISO, isPast, differenceInDays, addDays, addWeeks, addMonths } from 'date-fns';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useTasks, useUpdateTask } from '@/hooks/useTasks';
+import { useTasks, useUpdateTask, useCreateTask } from '@/hooks/useTasks';
 import { useAddTaskHistory } from '@/hooks/useTaskHistory';
 import { TaskFormSheet } from '@/components/todo/TaskFormSheet';
 import { TaskHistorySheet } from '@/components/todo/TaskHistorySheet';
@@ -19,6 +19,7 @@ export default function Todo() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [editingTask, setEditingTask] = useState<any>(null);
   const [filter, setFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const addHistory = useAddTaskHistory();
 
@@ -43,12 +44,55 @@ export default function Todo() {
     const isCompleting = !task.is_completed;
     const isOnTime = task.due_date ? !isPast(parseISO(task.due_date)) : true;
 
+    // For repeating tasks: when you complete it, we create the next occurrence as a NEW task.
+    // This keeps each occurrence unique (like separate calendar instances), instead of completing the whole series.
+    if (isCompleting && task.due_date && task.repeat_type && task.repeat_type !== 'none') {
+      const base = parseISO(task.due_date);
+      let next = base;
+
+      if (task.repeat_type === 'daily') next = addDays(base, 1);
+      if (task.repeat_type === 'weekly') next = addWeeks(base, 1);
+      if (task.repeat_type === 'monthly') next = addMonths(base, 1);
+
+      await createTask.mutateAsync({
+        title: task.title,
+        description: task.description ?? null,
+        start_date: task.start_date ?? null,
+        due_date: format(next, 'yyyy-MM-dd'),
+        due_time: task.due_time ?? null,
+        priority: task.priority,
+        repeat_type: task.repeat_type,
+        is_completed: false,
+        auto_complete: task.auto_complete ?? false,
+        delegation_status: 'none',
+        completed_at: null,
+      });
+
+      // Mark THIS occurrence complete and turn it into a non-repeating historic item.
+      await updateTask.mutateAsync({
+        id: task.id,
+        updates: {
+          is_completed: true,
+          completed_at: new Date().toISOString(),
+          repeat_type: 'none',
+        },
+      });
+
+      await addHistory.mutateAsync({
+        task_id: task.id,
+        action: 'completed',
+        details: { on_time: isOnTime, repeated: true },
+      });
+
+      return;
+    }
+
     await updateTask.mutateAsync({
       id: task.id,
-      updates: { 
+      updates: {
         is_completed: isCompleting,
         completed_at: isCompleting ? new Date().toISOString() : null,
-      }
+      },
     });
 
     if (isCompleting) {
