@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react';
-import { FileText, Plus, Trash2, Edit2, ArrowUpDown, ExternalLink, Check, Calendar, User, Filter } from 'lucide-react';
-import { format, differenceInDays, isPast } from 'date-fns';
+import { FileText, Plus, ArrowUpDown, ExternalLink, Check, Calendar, User } from 'lucide-react';
+import { format, differenceInDays } from 'date-fns';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useRenewals, useDeleteRenewal, useAddRenewalToExpenses, Renewal } from '@/hooks/useRenewals';
+import { SwipeableRow } from '@/components/ui/swipeable-row';
+import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
+import { useRenewals, useDeleteRenewal, useAddRenewalToExpenses, useCreateRenewal, Renewal } from '@/hooks/useRenewals';
 import { RenewalFormSheet } from '@/components/renewals/RenewalFormSheet';
 
 type SortOption = 'expiry' | 'value' | 'name';
@@ -14,11 +16,19 @@ export default function Renewals() {
   const { data: renewals, isLoading } = useRenewals();
   const deleteRenewal = useDeleteRenewal();
   const addToExpenses = useAddRenewalToExpenses();
+  const createRenewal = useCreateRenewal();
   
   const [showForm, setShowForm] = useState(false);
   const [editingRenewal, setEditingRenewal] = useState<Renewal | undefined>();
   const [sortBy, setSortBy] = useState<SortOption>('expiry');
   const [filterPerson, setFilterPerson] = useState<string | null>(null);
+
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    id: string;
+    name: string;
+  }>({ open: false, id: '', name: '' });
 
   // Get unique persons/addresses for filter
   const uniquePersons = useMemo(() => {
@@ -99,6 +109,34 @@ export default function Renewals() {
   };
 
   const getInitialIcon = (name: string) => name.charAt(0).toUpperCase();
+
+  const handleDelete = (renewal: Renewal) => {
+    setDeleteConfirm({ open: true, id: renewal.id, name: renewal.name });
+  };
+
+  const confirmDelete = () => {
+    deleteRenewal.mutate(deleteConfirm.id);
+    setDeleteConfirm({ open: false, id: '', name: '' });
+  };
+
+  const handleDuplicate = (renewal: Renewal) => {
+    createRenewal.mutate({
+      name: `${renewal.name} (Copy)`,
+      provider: renewal.provider,
+      total_cost: renewal.total_cost,
+      monthly_amount: renewal.monthly_amount,
+      frequency: renewal.frequency,
+      is_monthly_payment: renewal.is_monthly_payment,
+      agreement_start: renewal.agreement_start,
+      agreement_end: renewal.agreement_end,
+      person_or_address: renewal.person_or_address,
+      notes: renewal.notes,
+      file_url: null,
+      file_name: null,
+      added_to_expenses: false,
+      linked_expense_id: null,
+    });
+  };
 
   if (isLoading) {
     return (
@@ -182,84 +220,81 @@ export default function Renewals() {
       {/* Renewals List */}
       <div className="finance-card">
         {sortedRenewals.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-1">
             {sortedRenewals.map((renewal) => {
               const paymentStatus = getPaymentStatus(renewal);
               return (
-                <div
+                <SwipeableRow
                   key={renewal.id}
-                  className="flex items-center justify-between py-3 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 rounded transition-colors"
-                  onDoubleClick={() => { setEditingRenewal(renewal); setShowForm(true); }}
+                  onEdit={() => { setEditingRenewal(renewal); setShowForm(true); }}
+                  onDelete={() => handleDelete(renewal)}
+                  onDuplicate={() => handleDuplicate(renewal)}
                 >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0">
-                      {getInitialIcon(renewal.name)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium truncate">{renewal.name}</p>
-                        {renewal.added_to_expenses && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                            <Check className="h-2.5 w-2.5 mr-0.5" />
-                            In Expenses
-                          </Badge>
-                        )}
-                        {paymentStatus && (
-                          <Badge variant={paymentStatus.variant} className="text-[10px] px-1.5 py-0">
-                            <Calendar className="h-2.5 w-2.5 mr-0.5" />
-                            Next: {paymentStatus.label}
-                          </Badge>
-                        )}
+                  <div className="flex items-center justify-between py-3 px-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 transition-colors bg-card">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0">
+                        {getInitialIcon(renewal.name)}
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                        {renewal.person_or_address && (
-                          <>
-                            <span className="flex items-center gap-0.5">
-                              <User className="h-3 w-3" />
-                              {renewal.person_or_address}
-                            </span>
-                            <span>·</span>
-                          </>
-                        )}
-                        {renewal.provider && <span>{renewal.provider}</span>}
-                        {renewal.provider && renewal.agreement_end && <span>·</span>}
-                        {renewal.agreement_end && (
-                          <span>Ends {format(new Date(renewal.agreement_end), 'dd/MM/yyyy')}</span>
-                        )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-medium truncate">{renewal.name}</p>
+                          {renewal.added_to_expenses && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                              <Check className="h-2.5 w-2.5 mr-0.5" />
+                              In Expenses
+                            </Badge>
+                          )}
+                          {paymentStatus && (
+                            <Badge variant={paymentStatus.variant} className="text-[10px] px-1.5 py-0">
+                              <Calendar className="h-2.5 w-2.5 mr-0.5" />
+                              Next: {paymentStatus.label}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                          {renewal.person_or_address && (
+                            <>
+                              <span className="flex items-center gap-0.5">
+                                <User className="h-3 w-3" />
+                                {renewal.person_or_address}
+                              </span>
+                              <span>·</span>
+                            </>
+                          )}
+                          {renewal.provider && <span>{renewal.provider}</span>}
+                          {renewal.provider && renewal.agreement_end && <span>·</span>}
+                          {renewal.agreement_end && (
+                            <span>Ends {format(new Date(renewal.agreement_end), 'dd/MM/yyyy')}</span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className="text-right">
-                      <AmountDisplay amount={renewal.total_cost || 0} size="sm" />
-                      <p className="text-[10px] text-muted-foreground">
-                        {renewal.is_monthly_payment ? 'annual' : 'one-off'}
-                      </p>
                     </div>
                     
-                    {!renewal.added_to_expenses && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        onClick={() => addToExpenses.mutate(renewal)}
-                        title="Add to expenses"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                      </Button>
-                    )}
-                    
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 text-destructive"
-                      onClick={() => deleteRenewal.mutate(renewal.id)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="text-right">
+                        <AmountDisplay amount={renewal.total_cost || 0} size="sm" />
+                        <p className="text-[10px] text-muted-foreground">
+                          {renewal.is_monthly_payment ? 'annual' : 'one-off'}
+                        </p>
+                      </div>
+                      
+                      {!renewal.added_to_expenses && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addToExpenses.mutate(renewal);
+                          }}
+                          title="Add to expenses"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </SwipeableRow>
               );
             })}
           </div>
@@ -286,6 +321,14 @@ export default function Renewals() {
         open={showForm}
         onOpenChange={setShowForm}
         renewal={editingRenewal}
+      />
+
+      <DeleteConfirmDialog
+        open={deleteConfirm.open}
+        onOpenChange={(open) => setDeleteConfirm(prev => ({ ...prev, open }))}
+        onConfirm={confirmDelete}
+        title="Delete Renewal"
+        itemName={deleteConfirm.name}
       />
     </div>
   );

@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownCircle, ArrowUpCircle, Plus, Trash2, Users, ArrowUpDown, ChevronRight, CalendarDays, CalendarClock } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Plus, Users, ArrowUpDown, ChevronRight, CalendarDays, CalendarClock } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { SwipeableRow } from '@/components/ui/swipeable-row';
+import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
 import { 
   useIncomeSources, 
   useExpenseItems, 
@@ -12,6 +14,8 @@ import {
   useDeleteIncomeSource,
   useDeleteExpenseItem,
   useUpdateExpenseItem,
+  useCreateExpenseItem,
+  useCreateIncomeSource,
 } from '@/hooks/useFinanceData';
 import { useAllSubExpenses } from '@/hooks/useSubExpenses';
 import { IncomeFormSheet } from '@/components/cashflow/IncomeFormSheet';
@@ -32,6 +36,8 @@ export default function Cashflow() {
   const deleteIncome = useDeleteIncomeSource();
   const deleteExpense = useDeleteExpenseItem();
   const updateExpense = useUpdateExpenseItem();
+  const createExpense = useCreateExpenseItem();
+  const createIncome = useCreateIncomeSource();
   
   const [showIncomeForm, setShowIncomeForm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -42,6 +48,14 @@ export default function Cashflow() {
   const [showCalendar, setShowCalendar] = useState(false);
   
   const [sortBy, setSortBy] = useState<SortOption>('value');
+
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    type: 'expense' | 'income';
+    id: string;
+    name: string;
+  }>({ open: false, type: 'expense', id: '', name: '' });
 
   const totalIncome = income?.reduce((sum, i) => sum + Number(i.monthly_amount), 0) ?? 0;
   
@@ -134,6 +148,49 @@ export default function Cashflow() {
     navigate(`/debts/${debtId}`);
   };
 
+  const handleDeleteExpense = (expense: ExpenseItem) => {
+    setDeleteConfirm({ open: true, type: 'expense', id: expense.id, name: expense.name });
+  };
+
+  const handleDeleteIncome = (source: IncomeSource) => {
+    setDeleteConfirm({ open: true, type: 'income', id: source.id, name: source.name });
+  };
+
+  const confirmDelete = () => {
+    if (deleteConfirm.type === 'expense') {
+      deleteExpense.mutate(deleteConfirm.id);
+    } else {
+      deleteIncome.mutate(deleteConfirm.id);
+    }
+    setDeleteConfirm({ open: false, type: 'expense', id: '', name: '' });
+  };
+
+  const handleDuplicateExpense = (expense: ExpenseItem) => {
+    createExpense.mutate({
+      name: `${expense.name} (Copy)`,
+      monthly_amount: expense.monthly_amount,
+      category: expense.category,
+      frequency: expense.frequency,
+      couples_mode: expense.couples_mode,
+      provider: expense.provider,
+      renewal_date: expense.renewal_date,
+      reminder_days_before: expense.reminder_days_before,
+      reminder_email: expense.reminder_email,
+      reminder_sms: expense.reminder_sms,
+      start_date: expense.start_date,
+      end_date: expense.end_date,
+    });
+  };
+
+  const handleDuplicateIncome = (source: IncomeSource) => {
+    createIncome.mutate({
+      name: `${source.name} (Copy)`,
+      monthly_amount: source.monthly_amount,
+      start_date: source.start_date,
+      end_date: source.end_date,
+    });
+  };
+
   const renderExpenseItem = (expense: ExpenseItem, isAnnual: boolean = false) => {
     const fullAmount = Number(expense.monthly_amount);
     const isCouples = !!expense.couples_mode;
@@ -141,66 +198,63 @@ export default function Cashflow() {
     const subCount = getSubExpenseCount(expense.id);
     
     return (
-      <div
+      <SwipeableRow
         key={expense.id}
-        className="flex items-center justify-between py-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 rounded transition-colors"
-        onDoubleClick={() => { setEditingExpense(expense); setShowExpenseForm(true); }}
+        onEdit={() => { setEditingExpense(expense); setShowExpenseForm(true); }}
+        onDelete={() => handleDeleteExpense(expense)}
+        onDuplicate={() => handleDuplicateExpense(expense)}
       >
-        <div 
-          className="flex items-center gap-3 flex-1 cursor-pointer"
-          onClick={() => {
-            setSelectedExpenseForSub(expense);
-            setShowSubExpenseSheet(true);
-          }}
+        <div
+          className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 transition-colors bg-card"
         >
-          <div className="w-8 h-8 rounded-full bg-debt/20 flex items-center justify-center text-debt font-semibold text-sm">
-            {getInitialIcon(expense.name)}
-          </div>
-          <div>
-            <p className="text-sm flex items-center gap-1">
-              {expense.name}
-              {subCount > 0 && (
-                <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
-                  {subCount} sub
-                </span>
-              )}
-              <ChevronRight className="h-3 w-3 text-muted-foreground" />
-            </p>
-            <p className="text-xs text-muted-foreground">{getCategoryLabel(expense.category)}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="text-right">
-            <AmountDisplay amount={displayAmount} size="sm" />
-            {isCouples && (
-              <p className="text-[10px] text-muted-foreground line-through">
-                £{fullAmount.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-              </p>
-            )}
-            {isAnnual && (
-              <p className="text-[10px] text-muted-foreground">
-                £{(displayAmount / 12).toFixed(0)}/mo
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            <Users className="h-3 w-3 text-muted-foreground" />
-            <Switch
-              checked={isCouples}
-              onCheckedChange={(checked) => updateExpense.mutate({ id: expense.id, couples_mode: checked })}
-              className="scale-75"
-            />
-          </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7 text-debt"
-            onClick={() => deleteExpense.mutate(expense.id)}
+          <div 
+            className="flex items-center gap-3 flex-1 cursor-pointer"
+            onClick={() => {
+              setSelectedExpenseForSub(expense);
+              setShowSubExpenseSheet(true);
+            }}
           >
-            <Trash2 className="h-3 w-3" />
-          </Button>
+            <div className="w-8 h-8 rounded-full bg-debt/20 flex items-center justify-center text-debt font-semibold text-sm">
+              {getInitialIcon(expense.name)}
+            </div>
+            <div>
+              <p className="text-sm flex items-center gap-1">
+                {expense.name}
+                {subCount > 0 && (
+                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
+                    {subCount} sub
+                  </span>
+                )}
+                <ChevronRight className="h-3 w-3 text-muted-foreground" />
+              </p>
+              <p className="text-xs text-muted-foreground">{getCategoryLabel(expense.category)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="text-right">
+              <AmountDisplay amount={displayAmount} size="sm" />
+              {isCouples && (
+                <p className="text-[10px] text-muted-foreground line-through">
+                  £{fullAmount.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              )}
+              {isAnnual && (
+                <p className="text-[10px] text-muted-foreground">
+                  £{(displayAmount / 12).toFixed(0)}/mo
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <Users className="h-3 w-3 text-muted-foreground" />
+              <Switch
+                checked={isCouples}
+                onCheckedChange={(checked) => updateExpense.mutate({ id: expense.id, couples_mode: checked })}
+                className="scale-75"
+              />
+            </div>
+          </div>
         </div>
-      </div>
+      </SwipeableRow>
     );
   };
 
@@ -267,34 +321,26 @@ export default function Cashflow() {
         </div>
 
         {income && income.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-1">
             {income.map((source) => (
-              <div
+              <SwipeableRow
                 key={source.id}
-                className="flex items-center justify-between py-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 rounded transition-colors"
-                onDoubleClick={() => {
-                  setEditingIncome(source);
-                  setShowIncomeForm(true);
-                }}
+                onEdit={() => { setEditingIncome(source); setShowIncomeForm(true); }}
+                onDelete={() => handleDeleteIncome(source)}
+                onDuplicate={() => handleDuplicateIncome(source)}
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-savings/20 flex items-center justify-center text-savings font-semibold text-sm">
-                    {getInitialIcon(source.name)}
+                <div className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 transition-colors bg-card">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-savings/20 flex items-center justify-center text-savings font-semibold text-sm">
+                      {getInitialIcon(source.name)}
+                    </div>
+                    <p className="text-sm">{source.name}</p>
                   </div>
-                  <p className="text-sm">{source.name}</p>
+                  <div className="flex items-center gap-2">
+                    <AmountDisplay amount={Number(source.monthly_amount)} size="sm" />
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <AmountDisplay amount={Number(source.monthly_amount)} size="sm" />
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7 text-debt"
-                    onClick={() => deleteIncome.mutate(source.id)}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
+              </SwipeableRow>
             ))}
             <div className="flex items-center justify-between pt-2 font-medium">
               <p>Total</p>
@@ -342,7 +388,7 @@ export default function Cashflow() {
         </div>
 
         {sortedMonthlyExpenses.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-1">
             {sortedMonthlyExpenses.map((expense) => renderExpenseItem(expense, false))}
             <div className="flex items-center justify-between pt-2 font-medium">
               <p>Subtotal</p>
@@ -376,7 +422,7 @@ export default function Cashflow() {
         </div>
 
         {sortedAnnualExpenses.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-1">
             {sortedAnnualExpenses.map((expense) => renderExpenseItem(expense, true))}
             <div className="flex items-center justify-between pt-2 font-medium border-t border-border">
               <p>Subtotal (Annual)</p>
@@ -459,6 +505,14 @@ export default function Cashflow() {
           expense={selectedExpenseForSub}
         />
       )}
+
+      <DeleteConfirmDialog
+        open={deleteConfirm.open}
+        onOpenChange={(open) => setDeleteConfirm(prev => ({ ...prev, open }))}
+        onConfirm={confirmDelete}
+        title={deleteConfirm.type === 'expense' ? 'Delete Expense' : 'Delete Income'}
+        itemName={deleteConfirm.name}
+      />
     </div>
   );
 }
