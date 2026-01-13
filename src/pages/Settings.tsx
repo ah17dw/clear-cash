@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Download, Phone, Camera, Bell, Upload } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Download, Phone, Camera, Bell, Shield } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/useAuth';
 import { useDebts, useSavingsAccounts, useIncomeSources, useExpenseItems } from '@/hooks/useFinanceData';
+import { useIsAdmin } from '@/hooks/useAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -18,7 +20,9 @@ interface Profile {
 }
 
 export default function Settings() {
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const { data: isAdmin } = useIsAdmin();
   const { data: debts } = useDebts();
   const { data: savings } = useSavingsAccounts();
   const { data: income } = useIncomeSources();
@@ -273,7 +277,7 @@ export default function Settings() {
       </div>
 
       {/* Preferences */}
-      <div className="finance-card">
+      <div className="finance-card mb-4">
         <h3 className="font-medium mb-3">Preferences</h3>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between py-2">
@@ -286,6 +290,27 @@ export default function Settings() {
           </div>
         </div>
       </div>
+
+      {/* Admin Portal - only show for admins */}
+      {isAdmin && (
+        <div className="finance-card">
+          <h3 className="font-medium mb-3 flex items-center gap-2">
+            <Shield className="h-4 w-4 text-primary" />
+            Administration
+          </h3>
+          <Button
+            variant="outline"
+            className="w-full gap-2"
+            onClick={() => navigate('/admin')}
+          >
+            <Shield className="h-4 w-4" />
+            Admin Portal
+          </Button>
+          <p className="text-xs text-muted-foreground mt-2">
+            Manage users, roles, and view activity
+          </p>
+        </div>
+      )}
     </div>
   );
 }
