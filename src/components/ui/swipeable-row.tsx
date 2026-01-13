@@ -26,7 +26,7 @@ export function SwipeableRow({
   const rowRef = useRef<HTMLDivElement>(null);
 
   const SWIPE_THRESHOLD = 50;
-  const ACTION_WIDTH = 140; // Width of action buttons area
+  const ACTION_WIDTH = 140;
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (disabled) return;
@@ -37,12 +37,16 @@ export function SwipeableRow({
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isDragging || disabled) return;
     const diff = startX - e.touches[0].clientX;
-    // Only allow swiping left (positive diff)
-    if (diff > 0) {
-      setCurrentX(Math.min(diff, ACTION_WIDTH));
-    } else if (isOpen) {
-      // Allow swiping right to close
-      setCurrentX(Math.max(ACTION_WIDTH + diff, 0));
+    
+    if (isOpen) {
+      // When open, allow swiping right to close
+      const newX = ACTION_WIDTH + diff;
+      setCurrentX(Math.max(0, Math.min(newX, ACTION_WIDTH)));
+    } else {
+      // When closed, allow swiping left to open
+      if (diff > 0) {
+        setCurrentX(Math.min(diff, ACTION_WIDTH));
+      }
     }
   };
 
@@ -50,12 +54,21 @@ export function SwipeableRow({
     if (!isDragging || disabled) return;
     setIsDragging(false);
     
-    if (currentX > SWIPE_THRESHOLD) {
-      setIsOpen(true);
-      setCurrentX(ACTION_WIDTH);
+    if (isOpen) {
+      // If currently open, close if swiped past threshold
+      if (currentX < ACTION_WIDTH - SWIPE_THRESHOLD) {
+        closeActions();
+      } else {
+        setCurrentX(ACTION_WIDTH);
+      }
     } else {
-      setIsOpen(false);
-      setCurrentX(0);
+      // If currently closed, open if swiped past threshold
+      if (currentX > SWIPE_THRESHOLD) {
+        setIsOpen(true);
+        setCurrentX(ACTION_WIDTH);
+      } else {
+        setCurrentX(0);
+      }
     }
   };
 
@@ -68,10 +81,14 @@ export function SwipeableRow({
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging || disabled) return;
     const diff = startX - e.clientX;
-    if (diff > 0) {
-      setCurrentX(Math.min(diff, ACTION_WIDTH));
-    } else if (isOpen) {
-      setCurrentX(Math.max(ACTION_WIDTH + diff, 0));
+    
+    if (isOpen) {
+      const newX = ACTION_WIDTH + diff;
+      setCurrentX(Math.max(0, Math.min(newX, ACTION_WIDTH)));
+    } else {
+      if (diff > 0) {
+        setCurrentX(Math.min(diff, ACTION_WIDTH));
+      }
     }
   };
 
@@ -79,12 +96,19 @@ export function SwipeableRow({
     if (!isDragging || disabled) return;
     setIsDragging(false);
     
-    if (currentX > SWIPE_THRESHOLD) {
-      setIsOpen(true);
-      setCurrentX(ACTION_WIDTH);
+    if (isOpen) {
+      if (currentX < ACTION_WIDTH - SWIPE_THRESHOLD) {
+        closeActions();
+      } else {
+        setCurrentX(ACTION_WIDTH);
+      }
     } else {
-      setIsOpen(false);
-      setCurrentX(0);
+      if (currentX > SWIPE_THRESHOLD) {
+        setIsOpen(true);
+        setCurrentX(ACTION_WIDTH);
+      } else {
+        setCurrentX(0);
+      }
     }
   };
 
@@ -99,9 +123,18 @@ export function SwipeableRow({
     setCurrentX(0);
   };
 
-  const handleAction = (action: () => void) => {
+  const handleAction = (e: React.MouseEvent, action: () => void) => {
+    e.stopPropagation();
     closeActions();
     action();
+  };
+
+  const handleContentClick = (e: React.MouseEvent) => {
+    if (isOpen) {
+      e.stopPropagation();
+      e.preventDefault();
+      closeActions();
+    }
   };
 
   const translateX = isDragging ? -currentX : (isOpen ? -ACTION_WIDTH : 0);
@@ -116,7 +149,7 @@ export function SwipeableRow({
         >
           {onEdit && (
             <button
-              onClick={() => handleAction(onEdit)}
+              onClick={(e) => handleAction(e, onEdit)}
               className="flex-1 flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
               aria-label="Edit"
             >
@@ -125,7 +158,7 @@ export function SwipeableRow({
           )}
           {onDuplicate && (
             <button
-              onClick={() => handleAction(onDuplicate)}
+              onClick={(e) => handleAction(e, onDuplicate)}
               className="flex-1 flex items-center justify-center bg-secondary text-secondary-foreground hover:bg-secondary/90 transition-colors"
               aria-label="Duplicate"
             >
@@ -134,7 +167,7 @@ export function SwipeableRow({
           )}
           {onDelete && (
             <button
-              onClick={() => handleAction(onDelete)}
+              onClick={(e) => handleAction(e, onDelete)}
               className="flex-1 flex items-center justify-center bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
               aria-label="Delete"
             >
@@ -148,8 +181,9 @@ export function SwipeableRow({
       <div
         ref={rowRef}
         className={cn(
-          'relative bg-card transition-transform',
-          isDragging ? 'transition-none' : 'transition-transform duration-200'
+          'relative bg-card',
+          isDragging ? 'transition-none' : 'transition-transform duration-200',
+          isOpen && 'cursor-pointer'
         )}
         style={{ transform: `translateX(${translateX}px)` }}
         onTouchStart={handleTouchStart}
@@ -159,18 +193,10 @@ export function SwipeableRow({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseLeave}
+        onClick={handleContentClick}
       >
         {children}
       </div>
-
-      {/* Tap to close overlay when actions are open */}
-      {isOpen && (
-        <div 
-          className="absolute inset-0 z-10"
-          style={{ right: `${ACTION_WIDTH}px` }}
-          onClick={closeActions}
-        />
-      )}
     </div>
   );
 }
