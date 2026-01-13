@@ -15,7 +15,7 @@ import {
 import { Sparkles, Loader2, FileText, Trash2, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { useCreateRenewal, useUpdateRenewal, useExtractContract, useRenewalFiles, useAddRenewalFile, useDeleteRenewalFile, getSignedFileUrl, Renewal } from '@/hooks/useRenewals';
+import { useCreateRenewal, useUpdateRenewal, useExtractContract, useRenewalFiles, useAddRenewalFile, useDeleteRenewalFile, getSignedFileUrl, useRenewals, Renewal } from '@/hooks/useRenewals';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -37,9 +37,19 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
   const createRenewal = useCreateRenewal();
   const updateRenewal = useUpdateRenewal();
   const extractContract = useExtractContract();
+  const { data: allRenewals } = useRenewals();
   const { data: existingFiles } = useRenewalFiles(renewal?.id ?? '');
   const addRenewalFile = useAddRenewalFile();
   const deleteRenewalFile = useDeleteRenewalFile();
+
+  // Get unique persons/addresses from existing renewals
+  const existingPersons = Array.from(
+    new Set(
+      (allRenewals || [])
+        .map(r => r.person_or_address)
+        .filter((p): p is string => !!p && p.trim() !== '')
+    )
+  ).sort();
 
   const [name, setName] = useState('');
   const [provider, setProvider] = useState('');
@@ -448,6 +458,24 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
 
             <div className="space-y-2">
               <Label>Person / Address</Label>
+              {existingPersons.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {existingPersons.map((person) => (
+                    <button
+                      key={person}
+                      type="button"
+                      onClick={() => setPersonOrAddress(person)}
+                      className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+                        personOrAddress === person
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-muted/50 hover:bg-muted border-border'
+                      }`}
+                    >
+                      {person}
+                    </button>
+                  ))}
+                </div>
+              )}
               <Input
                 value={personOrAddress}
                 onChange={(e) => setPersonOrAddress(e.target.value)}
