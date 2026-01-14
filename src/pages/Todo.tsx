@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Plus, Calendar, Clock, Flag, Repeat, CheckCircle2, History, 
   AlertTriangle, CalendarDays, Check, X, HelpCircle, Users, 
@@ -24,6 +25,7 @@ import { TaskFormSheet } from '@/components/todo/TaskFormSheet';
 import { TaskHistorySheet } from '@/components/todo/TaskHistorySheet';
 import { TaskCalendar } from '@/components/todo/TaskCalendar';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 // Household members - this could come from a database/settings in the future
 const HOUSEHOLD_MEMBERS = [
@@ -42,6 +44,7 @@ interface TaskWithTags extends Task {
 
 export default function Todo() {
   const { data: tasks, isLoading } = useTasks();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showForm, setShowForm] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -52,6 +55,41 @@ export default function Todo() {
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const addHistory = useAddTaskHistory();
+
+  // Handle deep-link from email delegation response
+  useEffect(() => {
+    const taskId = searchParams.get('task');
+    const delegationResponse = searchParams.get('delegation');
+    
+    if (taskId && delegationResponse && tasks) {
+      // Find the task
+      const task = tasks.find(t => t.id === taskId);
+      
+      if (task) {
+        // Show toast based on delegation response
+        if (delegationResponse === 'accepted') {
+          toast.success('Task accepted!', {
+            description: `"${task.title}" has been accepted.`,
+          });
+        } else if (delegationResponse === 'rejected') {
+          toast.error('Task declined', {
+            description: `"${task.title}" was declined.`,
+          });
+        } else if (delegationResponse === 'already_responded') {
+          toast.info('Already responded', {
+            description: `You have already responded to "${task.title}".`,
+          });
+        }
+        
+        // Open the task form to show details
+        setEditingTask(task);
+        setShowForm(true);
+      }
+      
+      // Clear the URL params
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, tasks, setSearchParams]);
 
   // Enrich tasks with assignee info
   const enrichedTasks = useMemo(() => {
@@ -286,19 +324,33 @@ export default function Todo() {
               )}
             </div>
 
-            {/* Assignee Avatars */}
+            {/* Assignee Status */}
             {task.delegation_status !== 'none' && (
               <div className="flex items-center gap-1 mt-2">
-                <Avatar className="h-5 w-5">
-                  <AvatarFallback className="text-[10px] bg-primary/20">
-                    <User className="h-3 w-3" />
-                  </AvatarFallback>
-                </Avatar>
-                <span className="text-xs text-muted-foreground">
-                  {task.delegation_status === 'pending' && 'Awaiting response'}
-                  {task.delegation_status === 'accepted' && 'Accepted'}
-                  {task.delegation_status === 'rejected' && 'Declined'}
-                </span>
+                {task.delegation_status === 'rejected' ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-destructive text-destructive-foreground text-xs font-medium">
+                    <X className="h-3 w-3" />
+                    Declined
+                  </span>
+                ) : (
+                  <>
+                    <Avatar className="h-5 w-5">
+                      <AvatarFallback className={cn(
+                        "text-[10px]",
+                        task.delegation_status === 'accepted' ? "bg-savings/20" : "bg-primary/20"
+                      )}>
+                        <User className="h-3 w-3" />
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className={cn(
+                      "text-xs",
+                      task.delegation_status === 'accepted' ? "text-savings font-medium" : "text-muted-foreground"
+                    )}>
+                      {task.delegation_status === 'pending' && 'Awaiting response'}
+                      {task.delegation_status === 'accepted' && 'Accepted'}
+                    </span>
+                  </>
+                )}
               </div>
             )}
           </div>
