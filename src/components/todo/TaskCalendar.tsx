@@ -84,9 +84,11 @@ export function TaskCalendar({ tasks = [] }: TaskCalendarProps) {
 
     // Generate task events including recurring ones
     tasks.forEach(task => {
-      if (!task.due_date || task.is_completed) return;
+      // Use due_date if available, otherwise fall back to start_date
+      const taskDate = task.due_date || task.start_date;
+      if (!taskDate || task.is_completed) return;
       
-      const baseDueDate = parseISO(task.due_date);
+      const baseDueDate = parseISO(taskDate);
       const repeatType = task.repeat_type || 'none';
       
       // For recurring tasks, generate instances within the month view
