@@ -76,13 +76,13 @@ serve(async (req) => {
     // Check if already responded - redirect to app anyway
     if (delegationRecord.responded_at) {
       const redirectUrl = `${APP_URL}/todo?task=${delegationRecord.task_id}&delegation=already_responded`;
-      return new Response(
-        renderRedirectHtml("You have already responded to this task", true, redirectUrl),
-        {
-          status: 200,
-          headers: htmlHeaders,
-        }
-      );
+      return new Response(null, {
+        status: 302,
+        headers: {
+          "Location": redirectUrl,
+          ...corsHeaders,
+        },
+      });
     }
 
     // Update the delegation response record
@@ -126,19 +126,16 @@ serve(async (req) => {
       response,
     });
 
-    // Redirect to app with task ID and response status
+    // Direct 302 redirect to app - more reliable than HTML redirect
     const redirectUrl = `${APP_URL}/todo?task=${delegationRecord.task_id}&delegation=${response}`;
     
-    return new Response(
-      renderRedirectHtml(isAccepted ? "Task Accepted!" : "Task Declined", isAccepted, redirectUrl),
-      {
-        status: 200,
-        headers: {
-          "Content-Type": "text/html; charset=utf-8",
-          ...corsHeaders,
-        },
-      }
-    );
+    return new Response(null, {
+      status: 302,
+      headers: {
+        "Location": redirectUrl,
+        ...corsHeaders,
+      },
+    });
   } catch (error) {
     console.error("Error in delegation-response", error);
     return new Response(renderErrorHtml("An error occurred"), {
