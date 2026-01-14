@@ -47,6 +47,24 @@ export type Database = {
         }
         Relationships: []
       }
+      authorized_users: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+        }
+        Relationships: []
+      }
       debt_payments: {
         Row: {
           amount: number
@@ -725,6 +743,15 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      is_authorized: { Args: never; Returns: boolean }
+      search_users: {
+        Args: { search_term: string }
+        Returns: {
+          avatar_url: string
+          display_name: string
+          user_id: string
+        }[]
       }
     }
     Enums: {

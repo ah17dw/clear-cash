@@ -11,16 +11,12 @@ export function useSearchProfiles(searchTerm: string) {
     queryFn: async () => {
       if (!searchTerm || searchTerm.length < 2) return [];
       
-      // Search by display_name (case insensitive)
+      // Use secure RPC function that only returns safe fields
       const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .neq('user_id', user!.id)
-        .ilike('display_name', `%${searchTerm}%`)
-        .limit(10);
+        .rpc('search_users', { search_term: searchTerm });
 
       if (error) throw error;
-      return data as UserProfile[];
+      return (data || []) as Pick<UserProfile, 'user_id' | 'display_name' | 'avatar_url'>[];
     },
     enabled: !!user && searchTerm.length >= 2,
   });
