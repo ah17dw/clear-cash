@@ -32,9 +32,10 @@ interface IncomeFormSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   income?: IncomeSource;
+  readOnly?: boolean;
 }
 
-export function IncomeFormSheet({ open, onOpenChange, income }: IncomeFormSheetProps) {
+export function IncomeFormSheet({ open, onOpenChange, income, readOnly = false }: IncomeFormSheetProps) {
   const createIncome = useCreateIncomeSource();
   const updateIncome = useUpdateIncomeSource();
   const isEditing = !!income;
@@ -113,25 +114,26 @@ export function IncomeFormSheet({ open, onOpenChange, income }: IncomeFormSheetP
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="h-auto max-h-[90vh] overflow-y-auto">
         <SheetHeader className="mb-4">
-          <SheetTitle>{isEditing ? 'Edit Income' : 'Add Income'}</SheetTitle>
+          <SheetTitle>{readOnly ? 'Income Details' : isEditing ? 'Edit Income' : 'Add Income'}</SheetTitle>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pb-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Name *</Label>
-            <Input id="name" {...register('name')} placeholder="e.g. Salary" />
+            <Label htmlFor="name">Name {!readOnly && '*'}</Label>
+            <Input id="name" {...register('name')} placeholder="e.g. Salary" disabled={readOnly} />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="amount">
-              {isMonthly ? 'Monthly Amount *' : 'Annual Amount *'}
+              {isMonthly ? 'Monthly Amount' : 'Annual Amount'} {!readOnly && '*'}
             </Label>
             <Input
               id="amount"
               type="number"
               step="0.01"
               {...register('amount')}
+              disabled={readOnly}
             />
             {!isMonthly && currentAmount > 0 && (
               <p className="text-xs text-muted-foreground">
@@ -145,12 +147,14 @@ export function IncomeFormSheet({ open, onOpenChange, income }: IncomeFormSheetP
             <div>
               <Label>Monthly income?</Label>
               <p className="text-xs text-muted-foreground">
-                Toggle if this is received monthly
+                {readOnly ? (isMonthly ? 'Received monthly' : 'Received annually') : 'Toggle if this is received monthly'}
               </p>
             </div>
             <Switch
               checked={isMonthly}
+              disabled={readOnly}
               onCheckedChange={(checked) => {
+                if (readOnly) return;
                 // Convert the amount when toggling
                 if (checked && currentAmount > 0) {
                   // Converting from annual to monthly: divide by 12
@@ -168,11 +172,14 @@ export function IncomeFormSheet({ open, onOpenChange, income }: IncomeFormSheetP
           <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
             <div>
               <Label>Temporary income?</Label>
-              <p className="text-xs text-muted-foreground">Set start/end dates</p>
+              <p className="text-xs text-muted-foreground">
+                {readOnly ? (isTemporary ? 'Has start/end dates' : 'No date restrictions') : 'Set start/end dates'}
+              </p>
             </div>
             <Switch
               checked={isTemporary}
-              onCheckedChange={setIsTemporary}
+              disabled={readOnly}
+              onCheckedChange={readOnly ? undefined : setIsTemporary}
             />
           </div>
 
@@ -180,56 +187,70 @@ export function IncomeFormSheet({ open, onOpenChange, income }: IncomeFormSheetP
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Start Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={cn('w-full justify-start', !startDate && 'text-muted-foreground')}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {startDate ? format(startDate, 'dd/MM/yyyy') : 'Select'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={startDate}
-                      onSelect={setStartDate}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                {readOnly ? (
+                  <p className="text-sm py-2 px-3 rounded-md bg-muted">
+                    {startDate ? format(startDate, 'dd/MM/yyyy') : 'Not set'}
+                  </p>
+                ) : (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={cn('w-full justify-start', !startDate && 'text-muted-foreground')}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {startDate ? format(startDate, 'dd/MM/yyyy') : 'Select'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={startDate}
+                        onSelect={setStartDate}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>End Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className={cn('w-full justify-start', !endDate && 'text-muted-foreground')}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {endDate ? format(endDate, 'dd/MM/yyyy') : 'Select'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={endDate}
-                      onSelect={setEndDate}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                {readOnly ? (
+                  <p className="text-sm py-2 px-3 rounded-md bg-muted">
+                    {endDate ? format(endDate, 'dd/MM/yyyy') : 'Not set'}
+                  </p>
+                ) : (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={cn('w-full justify-start', !endDate && 'text-muted-foreground')}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {endDate ? format(endDate, 'dd/MM/yyyy') : 'Select'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={endDate}
+                        onSelect={setEndDate}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                )}
               </div>
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={createIncome.isPending || updateIncome.isPending}>
-            {isEditing ? 'Save Changes' : 'Add Income'}
-          </Button>
+          {!readOnly && (
+            <Button type="submit" className="w-full" disabled={createIncome.isPending || updateIncome.isPending}>
+              {isEditing ? 'Save Changes' : 'Add Income'}
+            </Button>
+          )}
         </form>
       </SheetContent>
     </Sheet>
