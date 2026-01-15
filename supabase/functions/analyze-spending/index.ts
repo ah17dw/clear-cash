@@ -35,12 +35,16 @@ serve(async (req) => {
       `- ${i.name} (${i.provider || 'no provider'}): £${i.monthlyAmount}/mo${i.category ? ` [${i.category}]` : ''}`
     ).join('\n');
 
-    const response = await fetch('https://api.lovable.dev/v1/chat/completions', {
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      throw new Error('LOVABLE_API_KEY is not configured');
+    }
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
-        'x-lovable-project-id': Deno.env.get('SUPABASE_URL')?.split('//')[1]?.split('.')[0] || '',
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash-lite',
@@ -54,7 +58,6 @@ serve(async (req) => {
             content: `Here are my monthly expenses:\n${itemsList}\n\nGroup these into categories and return JSON in this exact format: {"categories": [{"category": "Category Name", "monthlyTotal": 123.45}]}. Sort by highest spending first. Maximum 6 categories, combine smaller ones into "Other".`
           }
         ],
-        temperature: 0.3,
       }),
     });
 
