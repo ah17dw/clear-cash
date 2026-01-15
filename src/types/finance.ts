@@ -71,6 +71,7 @@ export interface ExpenseItem {
   category: string | null;
   couples_mode?: boolean;
   renewal_date?: string | null;
+  payment_day?: number | null;
   provider?: string | null;
   reminder_email?: boolean;
   reminder_sms?: boolean;

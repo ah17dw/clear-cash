@@ -176,6 +176,7 @@ export type Database = {
           id: string
           monthly_amount: number
           name: string
+          payment_day: number | null
           provider: string | null
           reminder_days_before: number
           reminder_email: boolean
@@ -194,6 +195,7 @@ export type Database = {
           id?: string
           monthly_amount?: number
           name: string
+          payment_day?: number | null
           provider?: string | null
           reminder_days_before?: number
           reminder_email?: boolean
@@ -212,6 +214,7 @@ export type Database = {
           id?: string
           monthly_amount?: number
           name?: string
+          payment_day?: number | null
           provider?: string | null
           reminder_days_before?: number
           reminder_email?: boolean
