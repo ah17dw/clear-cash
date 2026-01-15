@@ -9,6 +9,7 @@ import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
 import { useRenewals, useDeleteRenewal, useAddRenewalToExpenses, useCreateRenewal, Renewal } from '@/hooks/useRenewals';
 import { RenewalFormSheet } from '@/components/renewals/RenewalFormSheet';
+import { UnifiedAddSheet } from '@/components/unified/UnifiedAddSheet';
 
 type SortOption = 'expiry' | 'value' | 'name';
 
@@ -19,6 +20,7 @@ export default function Renewals() {
   const createRenewal = useCreateRenewal();
   
   const [showForm, setShowForm] = useState(false);
+  const [showUnifiedAdd, setShowUnifiedAdd] = useState(false);
   const [editingRenewal, setEditingRenewal] = useState<Renewal | undefined>();
   const [sortBy, setSortBy] = useState<SortOption>('expiry');
   const [filterPerson, setFilterPerson] = useState<string | null>(null);
@@ -154,7 +156,7 @@ export default function Renewals() {
     <div className="page-container">
       <PageHeader 
         title="Renewals" 
-        onAdd={() => { setEditingRenewal(undefined); setShowForm(true); }}
+        onAdd={() => setShowUnifiedAdd(true)}
         addLabel="Add"
       />
 
@@ -331,6 +333,8 @@ export default function Renewals() {
         title="Delete Renewal"
         itemName={deleteConfirm.name}
       />
+
+      <UnifiedAddSheet open={showUnifiedAdd} onOpenChange={setShowUnifiedAdd} />
     </div>
   );
 }
