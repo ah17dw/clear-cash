@@ -43,6 +43,8 @@ export default function Cashflow() {
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [editingIncome, setEditingIncome] = useState<IncomeSource | undefined>();
   const [editingExpense, setEditingExpense] = useState<ExpenseItem | undefined>();
+  const [viewingIncome, setViewingIncome] = useState<IncomeSource | undefined>();
+  const [viewingExpense, setViewingExpense] = useState<ExpenseItem | undefined>();
   const [showSubExpenseSheet, setShowSubExpenseSheet] = useState(false);
   const [selectedExpenseForSub, setSelectedExpenseForSub] = useState<ExpenseItem | undefined>();
   const [showCalendar, setShowCalendar] = useState(false);
@@ -205,7 +207,8 @@ export default function Cashflow() {
         onDuplicate={() => handleDuplicateExpense(expense)}
       >
         <div
-          className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 bg-card"
+          className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 bg-card cursor-pointer hover:bg-muted/50 transition-colors"
+          onClick={() => setViewingExpense(expense)}
         >
           <div className="flex items-center gap-3 flex-1">
             <div className="w-8 h-8 rounded-full bg-debt/20 flex items-center justify-center text-debt font-semibold text-sm">
@@ -322,7 +325,10 @@ export default function Cashflow() {
                 onDelete={() => handleDeleteIncome(source)}
                 onDuplicate={() => handleDuplicateIncome(source)}
               >
-                <div className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 bg-card">
+                <div 
+                  className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 bg-card cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => setViewingIncome(source)}
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-savings/20 flex items-center justify-center text-savings font-semibold text-sm">
                       {getInitialIcon(source.name)}
@@ -498,10 +504,22 @@ export default function Cashflow() {
         onOpenChange={setShowIncomeForm}
         income={editingIncome}
       />
+      <IncomeFormSheet 
+        open={!!viewingIncome} 
+        onOpenChange={(open) => !open && setViewingIncome(undefined)}
+        income={viewingIncome}
+        readOnly
+      />
       <ExpenseFormSheet 
         open={showExpenseForm} 
         onOpenChange={setShowExpenseForm}
         expense={editingExpense}
+      />
+      <ExpenseFormSheet 
+        open={!!viewingExpense} 
+        onOpenChange={(open) => !open && setViewingExpense(undefined)}
+        expense={viewingExpense}
+        readOnly
       />
       {selectedExpenseForSub && (
         <SubExpenseSheet
