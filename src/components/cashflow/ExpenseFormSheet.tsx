@@ -312,15 +312,15 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
           {/* Payment Day */}
           <div className="space-y-2">
             <Label>Payment Day</Label>
-            <Select
-              value={paymentDay}
-              onValueChange={setPaymentDay}
+          <Select
+              value={paymentDay || 'none'}
+              onValueChange={(v) => setPaymentDay(v === 'none' ? '' : v)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select day" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No specific day</SelectItem>
+                <SelectItem value="none">No specific day</SelectItem>
                 {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                   <SelectItem key={day} value={day.toString()}>
                     {day}{day === 1 ? 'st' : day === 2 ? 'nd' : day === 3 ? 'rd' : 'th'}
