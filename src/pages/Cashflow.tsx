@@ -205,15 +205,9 @@ export default function Cashflow() {
         onDuplicate={() => handleDuplicateExpense(expense)}
       >
         <div
-          className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 transition-colors bg-card"
+          className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 bg-card"
         >
-          <div 
-            className="flex items-center gap-3 flex-1 cursor-pointer"
-            onClick={() => {
-              setSelectedExpenseForSub(expense);
-              setShowSubExpenseSheet(true);
-            }}
-          >
+          <div className="flex items-center gap-3 flex-1">
             <div className="w-8 h-8 rounded-full bg-debt/20 flex items-center justify-center text-debt font-semibold text-sm">
               {getInitialIcon(expense.name)}
             </div>
@@ -225,7 +219,6 @@ export default function Cashflow() {
                     {subCount} sub
                   </span>
                 )}
-                <ChevronRight className="h-3 w-3 text-muted-foreground" />
               </p>
               <p className="text-xs text-muted-foreground">{getCategoryLabel(expense.category)}</p>
             </div>
@@ -329,7 +322,7 @@ export default function Cashflow() {
                 onDelete={() => handleDeleteIncome(source)}
                 onDuplicate={() => handleDuplicateIncome(source)}
               >
-                <div className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 transition-colors bg-card">
+                <div className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 bg-card">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-savings/20 flex items-center justify-center text-savings font-semibold text-sm">
                       {getInitialIcon(source.name)}
