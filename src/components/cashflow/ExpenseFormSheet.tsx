@@ -332,6 +332,39 @@ export function ExpenseFormSheet({ open, onOpenChange, expense, readOnly = false
             </div>
           </div>
 
+          {/* Link to Parent Expense - shown prominently */}
+          <div className="space-y-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+            <div className="flex items-center gap-2">
+              <Link className="h-4 w-4 text-primary" />
+              <Label>Included in another expense?</Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Link to a parent if already accounted for elsewhere (shows as £0 in totals)
+            </p>
+            {readOnly ? (
+              <p className="text-sm py-2 px-3 rounded-md bg-muted">
+                {linkedParentName ? `Included in: ${linkedParentName}` : 'Not linked'}
+              </p>
+            ) : (
+              <Select
+                value={linkedParentId || 'none'}
+                onValueChange={(v) => setLinkedParentId(v === 'none' ? null : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select parent expense" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not linked (counts in totals)</SelectItem>
+                  {availableParentExpenses.map((exp) => (
+                    <SelectItem key={exp.id} value={exp.id}>
+                      {exp.name} (£{Number(exp.monthly_amount).toFixed(0)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
           {/* Payment Day */}
           <div className="space-y-2">
             <Label>Payment Day</Label>
@@ -491,38 +524,6 @@ export function ExpenseFormSheet({ open, onOpenChange, expense, readOnly = false
             </div>
           )}
 
-          {/* Link to Parent Expense */}
-          <div className="space-y-2 p-3 rounded-lg bg-muted/30">
-            <div className="flex items-center gap-2">
-              <Link className="h-4 w-4 text-muted-foreground" />
-              <Label>Included in another expense?</Label>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Link this expense to a parent if it's already accounted for elsewhere (e.g., Netflix included in Joint Card). It will show as £0 in totals.
-            </p>
-            {readOnly ? (
-              <p className="text-sm py-2 px-3 rounded-md bg-muted">
-                {linkedParentName ? `Included in: ${linkedParentName}` : 'Not linked'}
-              </p>
-            ) : (
-              <Select
-                value={linkedParentId || 'none'}
-                onValueChange={(v) => setLinkedParentId(v === 'none' ? null : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select parent expense" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Not linked (counts in totals)</SelectItem>
-                  {availableParentExpenses.map((exp) => (
-                    <SelectItem key={exp.id} value={exp.id}>
-                      {exp.name} (£{Number(exp.monthly_amount).toFixed(0)})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
 
           {/* Sub-expenses section - only show when editing or viewing */}
           {(isEditing || readOnly) && expense && (
