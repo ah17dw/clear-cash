@@ -1,4 +1,4 @@
-// Cashflow page - last updated: 2026-01-15 v3
+// Cashflow page - last updated: 2026-01-15 v4
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowDownCircle, ArrowUpCircle, Plus, Users, ArrowUpDown, ChevronRight, CalendarDays, CalendarClock, FileText } from 'lucide-react';
@@ -25,6 +25,7 @@ import { IncomeFormSheet } from '@/components/cashflow/IncomeFormSheet';
 import { ExpenseFormSheet } from '@/components/cashflow/ExpenseFormSheet';
 import { SubExpenseSheet } from '@/components/cashflow/SubExpenseSheet';
 import { FinanceCalendar } from '@/components/finance/FinanceCalendar';
+import { UnifiedAddSheet } from '@/components/unified/UnifiedAddSheet';
 import { EXPENSE_CATEGORIES, IncomeSource, ExpenseItem } from '@/types/finance';
 
 type SortOption = 'due' | 'value';
@@ -43,6 +44,7 @@ export default function Cashflow() {
   const createExpense = useCreateExpenseItem();
   const createIncome = useCreateIncomeSource();
   
+  const [showUnifiedAdd, setShowUnifiedAdd] = useState(false);
   const [showIncomeForm, setShowIncomeForm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [editingIncome, setEditingIncome] = useState<IncomeSource | undefined>();
@@ -335,7 +337,11 @@ export default function Cashflow() {
 
   return (
     <div className="page-container">
-      <PageHeader title="Cashflow" />
+      <PageHeader 
+        title="Cashflow" 
+        onAdd={() => setShowUnifiedAdd(true)}
+        addLabel="Add"
+      />
 
       {/* Summary Card */}
       <div className="finance-card mb-4">
@@ -617,6 +623,8 @@ export default function Cashflow() {
         title={deleteConfirm.type === 'expense' ? 'Delete Expense' : 'Delete Income'}
         itemName={deleteConfirm.name}
       />
+
+      <UnifiedAddSheet open={showUnifiedAdd} onOpenChange={setShowUnifiedAdd} />
     </div>
   );
 }

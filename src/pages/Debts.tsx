@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { DebtFormSheet } from '@/components/debts/DebtFormSheet';
 import { getAdjustedBalance } from '@/lib/debt-utils';
 import { FinanceCalendar } from '@/components/finance/FinanceCalendar';
+import { UnifiedAddSheet } from '@/components/unified/UnifiedAddSheet';
 
 type SortOption = 'balance' | 'apr' | 'promo_ending';
 
@@ -44,6 +45,7 @@ export default function Debts() {
   const deleteDebt = useDeleteDebt();
   const createDebt = useCreateDebt();
   const [showForm, setShowForm] = useState(false);
+  const [showUnifiedAdd, setShowUnifiedAdd] = useState(false);
   const [editingDebt, setEditingDebt] = useState<Debt | undefined>();
   const [showCalendar, setShowCalendar] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('balance');
@@ -124,7 +126,7 @@ export default function Debts() {
     <div className="page-container">
       <PageHeader 
         title="Debts" 
-        onAdd={() => { setEditingDebt(undefined); setShowForm(true); }}
+        onAdd={() => setShowUnifiedAdd(true)}
         addLabel="Add"
       />
 
@@ -381,6 +383,8 @@ export default function Debts() {
         itemName={deleteConfirm.name}
         description={`Are you sure you want to delete "${deleteConfirm.name}"? This will also remove all payment history.`}
       />
+
+      <UnifiedAddSheet open={showUnifiedAdd} onOpenChange={setShowUnifiedAdd} />
     </div>
   );
 }
