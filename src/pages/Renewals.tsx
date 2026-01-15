@@ -135,6 +135,7 @@ export default function Renewals() {
       file_name: null,
       added_to_expenses: false,
       linked_expense_id: null,
+      show_in_cashflow: false,
     });
   };
 

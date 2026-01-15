@@ -18,6 +18,7 @@ export interface Renewal {
   file_url: string | null;
   file_name: string | null;
   added_to_expenses: boolean;
+  show_in_cashflow: boolean;
   linked_expense_id: string | null;
   person_or_address: string | null;
   created_at: string;

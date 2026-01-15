@@ -74,7 +74,7 @@ export default function Cashflow() {
 
   // Renewals marked to show in cashflow (split by frequency)
   const { monthlyRenewals, annualRenewals } = useMemo(() => {
-    const visible = renewals?.filter(r => r.added_to_expenses) ?? [];
+    const visible = renewals?.filter(r => r.show_in_cashflow && !r.linked_expense_id) ?? [];
     const monthly = visible.filter(r => r.frequency === 'monthly' || r.is_monthly_payment);
     const annual = visible.filter(r => r.frequency === 'annually' && !r.is_monthly_payment);
     return { monthlyRenewals: monthly, annualRenewals: annual };

@@ -79,7 +79,7 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
       setAgreementEnd(renewal.agreement_end ? new Date(renewal.agreement_end) : undefined);
       setNotes(renewal.notes || '');
       setPersonOrAddress(renewal.person_or_address || '');
-      setShowInCashflow(renewal.added_to_expenses ?? false);
+      setShowInCashflow(renewal.show_in_cashflow ?? false);
       setPendingFiles([]);
     } else {
       resetForm();
@@ -220,8 +220,9 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
       person_or_address: personOrAddress.trim() || null,
       file_url: null,
       file_name: null,
-      added_to_expenses: showInCashflow,
+      added_to_expenses: renewal?.added_to_expenses ?? false,
       linked_expense_id: renewal?.linked_expense_id ?? null,
+      show_in_cashflow: showInCashflow,
     };
 
     try {
