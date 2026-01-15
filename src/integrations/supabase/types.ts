@@ -174,6 +174,7 @@ export type Database = {
           end_date: string | null
           frequency: string
           id: string
+          linked_parent_id: string | null
           monthly_amount: number
           name: string
           payment_day: number | null
@@ -193,6 +194,7 @@ export type Database = {
           end_date?: string | null
           frequency?: string
           id?: string
+          linked_parent_id?: string | null
           monthly_amount?: number
           name: string
           payment_day?: number | null
@@ -212,6 +214,7 @@ export type Database = {
           end_date?: string | null
           frequency?: string
           id?: string
+          linked_parent_id?: string | null
           monthly_amount?: number
           name?: string
           payment_day?: number | null
@@ -224,7 +227,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "expense_items_linked_parent_id_fkey"
+            columns: ["linked_parent_id"]
+            isOneToOne: false
+            referencedRelation: "expense_items"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       income_sources: {
         Row: {

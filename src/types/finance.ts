@@ -79,6 +79,7 @@ export interface ExpenseItem {
   start_date?: string | null;
   end_date?: string | null;
   frequency?: 'monthly' | 'annual';
+  linked_parent_id?: string | null;
   created_at: string;
   updated_at: string;
 }

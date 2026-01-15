@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowDownCircle, ArrowUpCircle, Plus, Users, ArrowUpDown, ChevronRight, CalendarDays, CalendarClock } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
@@ -69,8 +70,10 @@ export default function Cashflow() {
   }, [expenses]);
 
   // Calculate adjusted expenses (per-item, persisted per expense)
+  // Exclude linked expenses from totals (they're accounted for in their parent)
   const adjustedMonthlyExpensesTotal = useMemo(() => {
     return monthlyExpenses.reduce((sum, e) => {
+      if (e.linked_parent_id) return sum; // Skip linked expenses
       const multiplier = e.couples_mode ? 0.5 : 1;
       return sum + Number(e.monthly_amount) * multiplier;
     }, 0);
@@ -78,6 +81,7 @@ export default function Cashflow() {
 
   const adjustedAnnualExpensesTotal = useMemo(() => {
     return annualExpenses.reduce((sum, e) => {
+      if (e.linked_parent_id) return sum; // Skip linked expenses
       const multiplier = e.couples_mode ? 0.5 : 1;
       return sum + Number(e.monthly_amount) * multiplier;
     }, 0);
@@ -146,6 +150,11 @@ export default function Cashflow() {
     return allSubExpenses?.filter((s) => s.parent_expense_id === expenseId).length ?? 0;
   };
 
+  const getLinkedParentName = (linkedParentId: string | null | undefined) => {
+    if (!linkedParentId || !expenses) return null;
+    return expenses.find((e) => e.id === linkedParentId)?.name ?? null;
+  };
+
   const handleDebtClick = (debtId: string) => {
     navigate(`/debts/${debtId}`);
   };
@@ -196,7 +205,10 @@ export default function Cashflow() {
   const renderExpenseItem = (expense: ExpenseItem, isAnnual: boolean = false) => {
     const fullAmount = Number(expense.monthly_amount);
     const isCouples = !!expense.couples_mode;
-    const displayAmount = fullAmount * (isCouples ? 0.5 : 1);
+    const isLinked = !!expense.linked_parent_id;
+    const linkedParentName = getLinkedParentName(expense.linked_parent_id);
+    // Linked expenses show as £0 since they're accounted for in parent
+    const displayAmount = isLinked ? 0 : fullAmount * (isCouples ? 0.5 : 1);
     const subCount = getSubExpenseCount(expense.id);
     
     return (
@@ -207,11 +219,17 @@ export default function Cashflow() {
         onDuplicate={() => handleDuplicateExpense(expense)}
       >
         <div
-          className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 bg-card cursor-pointer hover:bg-muted/50 transition-colors"
+          className={cn(
+            "flex items-center justify-between py-2 px-2 border-b border-border last:border-0 bg-card cursor-pointer hover:bg-muted/50 transition-colors",
+            isLinked && "opacity-60"
+          )}
           onClick={() => setViewingExpense(expense)}
         >
           <div className="flex items-center gap-3 flex-1">
-            <div className="w-8 h-8 rounded-full bg-debt/20 flex items-center justify-center text-debt font-semibold text-sm">
+            <div className={cn(
+              "w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm",
+              isLinked ? "bg-muted text-muted-foreground" : "bg-debt/20 text-debt"
+            )}>
               {getInitialIcon(expense.name)}
             </div>
             <div>
@@ -223,31 +241,45 @@ export default function Cashflow() {
                   </span>
                 )}
               </p>
-              <p className="text-xs text-muted-foreground">{getCategoryLabel(expense.category)}</p>
+              {isLinked && linkedParentName ? (
+                <p className="text-xs text-muted-foreground italic">
+                  Included in {linkedParentName}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">{getCategoryLabel(expense.category)}</p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
             <div className="text-right">
-              <AmountDisplay amount={displayAmount} size="sm" />
-              {isCouples && (
-                <p className="text-[10px] text-muted-foreground line-through">
-                  £{fullAmount.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                </p>
-              )}
-              {isAnnual && (
-                <p className="text-[10px] text-muted-foreground">
-                  £{(displayAmount / 12).toFixed(0)}/mo
-                </p>
+              {isLinked ? (
+                <span className="text-xs text-muted-foreground">£0</span>
+              ) : (
+                <>
+                  <AmountDisplay amount={displayAmount} size="sm" />
+                  {isCouples && (
+                    <p className="text-[10px] text-muted-foreground line-through">
+                      £{fullAmount.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </p>
+                  )}
+                  {isAnnual && (
+                    <p className="text-[10px] text-muted-foreground">
+                      £{(displayAmount / 12).toFixed(0)}/mo
+                    </p>
+                  )}
+                </>
               )}
             </div>
-            <div className="flex items-center gap-1">
-              <Users className="h-3 w-3 text-muted-foreground" />
-              <Switch
-                checked={isCouples}
-                onCheckedChange={(checked) => updateExpense.mutate({ id: expense.id, couples_mode: checked })}
-                className="scale-75"
-              />
-            </div>
+            {!isLinked && (
+              <div className="flex items-center gap-1">
+                <Users className="h-3 w-3 text-muted-foreground" />
+                <Switch
+                  checked={isCouples}
+                  onCheckedChange={(checked) => updateExpense.mutate({ id: expense.id, couples_mode: checked })}
+                  className="scale-75"
+                />
+              </div>
+            )}
           </div>
         </div>
       </SwipeableRow>
