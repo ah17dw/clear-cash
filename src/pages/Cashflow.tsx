@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+// Cashflow page - last updated: 2026-01-15 v2
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowDownCircle, ArrowUpCircle, Plus, Users, ArrowUpDown, ChevronRight, CalendarDays, CalendarClock } from 'lucide-react';
 import { cn } from '@/lib/utils';
