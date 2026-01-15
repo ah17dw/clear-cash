@@ -53,6 +53,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
   const [renewalDate, setRenewalDate] = useState<Date | undefined>();
+  const [paymentDay, setPaymentDay] = useState<string>('');
   const [isMonthly, setIsMonthly] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -91,6 +92,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
       setStartDate(expense.start_date ? new Date(expense.start_date) : undefined);
       setEndDate(expense.end_date ? new Date(expense.end_date) : undefined);
       setRenewalDate(expense.renewal_date ? new Date(expense.renewal_date) : undefined);
+      setPaymentDay(expense.payment_day?.toString() ?? '');
       setIsTemporary(!!(expense.start_date || expense.end_date));
     } else {
       reset({
@@ -101,6 +103,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
       setStartDate(undefined);
       setEndDate(undefined);
       setRenewalDate(undefined);
+      setPaymentDay('');
       setIsTemporary(false);
       setIsMonthly(false);
       setUploadedFile(null);
@@ -174,12 +177,15 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
     const monthlyAmount = isMonthly ? data.amount : data.amount / 12;
     const frequency: 'monthly' | 'annual' = isMonthly ? 'monthly' : 'annual';
     
+    const parsedPaymentDay = paymentDay ? parseInt(paymentDay, 10) : null;
+    
     const payload = {
       name: data.name,
       monthly_amount: monthlyAmount,
       category: data.category || null,
       frequency,
       renewal_date: renewalDate ? format(renewalDate, 'yyyy-MM-dd') : null,
+      payment_day: parsedPaymentDay && parsedPaymentDay >= 1 && parsedPaymentDay <= 31 ? parsedPaymentDay : null,
       start_date: isTemporary && startDate ? format(startDate, 'yyyy-MM-dd') : null,
       end_date: isTemporary && endDate ? format(endDate, 'yyyy-MM-dd') : null,
     };
@@ -281,9 +287,24 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
             </div>
           </div>
 
-          {/* Renewal/Due Date */}
+          {/* Payment Day */}
           <div className="space-y-2">
-            <Label>Renewal / Due Date</Label>
+            <Label htmlFor="payment_day">Payment Day</Label>
+            <Input
+              id="payment_day"
+              type="number"
+              min="1"
+              max="31"
+              value={paymentDay}
+              onChange={(e) => setPaymentDay(e.target.value)}
+              placeholder="e.g. 15"
+            />
+            <p className="text-xs text-muted-foreground">Day of month when payment leaves your bank (1-31)</p>
+          </div>
+
+          {/* Renewal/Contract End Date */}
+          <div className="space-y-2">
+            <Label>Contract End / Renewal Date</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -304,7 +325,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
                 />
               </PopoverContent>
             </Popover>
-            <p className="text-xs text-muted-foreground">When is this expense due or up for renewal?</p>
+            <p className="text-xs text-muted-foreground">When does the contract end or come up for renewal?</p>
           </div>
 
           {/* Monthly Toggle */}
