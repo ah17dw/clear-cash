@@ -61,6 +61,7 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
   const [agreementEnd, setAgreementEnd] = useState<Date | undefined>();
   const [notes, setNotes] = useState('');
   const [personOrAddress, setPersonOrAddress] = useState('');
+  const [showInCashflow, setShowInCashflow] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedText, setExtractedText] = useState('');
@@ -78,6 +79,7 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
       setAgreementEnd(renewal.agreement_end ? new Date(renewal.agreement_end) : undefined);
       setNotes(renewal.notes || '');
       setPersonOrAddress(renewal.person_or_address || '');
+      setShowInCashflow(renewal.added_to_expenses ?? false);
       setPendingFiles([]);
     } else {
       resetForm();
@@ -95,6 +97,7 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
     setAgreementEnd(undefined);
     setNotes('');
     setPersonOrAddress('');
+    setShowInCashflow(false);
     setExtractedText('');
     setPendingFiles([]);
   };
@@ -217,7 +220,7 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
       person_or_address: personOrAddress.trim() || null,
       file_url: null,
       file_name: null,
-      added_to_expenses: renewal?.added_to_expenses ?? false,
+      added_to_expenses: showInCashflow,
       linked_expense_id: renewal?.linked_expense_id ?? null,
     };
 
@@ -480,6 +483,20 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
                 value={personOrAddress}
                 onChange={(e) => setPersonOrAddress(e.target.value)}
                 placeholder="e.g. Dad, Nan, 123 Main St..."
+              />
+            </div>
+
+            {/* Show in Cashflow toggle */}
+            <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20">
+              <div>
+                <Label>Show in Cashflow</Label>
+                <p className="text-xs text-muted-foreground">
+                  Display this renewal in Cashflow (won't duplicate totals)
+                </p>
+              </div>
+              <Switch
+                checked={showInCashflow}
+                onCheckedChange={setShowInCashflow}
               />
             </div>
 
