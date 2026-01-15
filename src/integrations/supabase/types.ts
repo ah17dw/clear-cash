@@ -391,6 +391,7 @@ export type Database = {
           notes: string | null
           person_or_address: string | null
           provider: string | null
+          show_in_cashflow: boolean
           total_cost: number
           updated_at: string
           user_id: string
@@ -411,6 +412,7 @@ export type Database = {
           notes?: string | null
           person_or_address?: string | null
           provider?: string | null
+          show_in_cashflow?: boolean
           total_cost?: number
           updated_at?: string
           user_id: string
@@ -431,6 +433,7 @@ export type Database = {
           notes?: string | null
           person_or_address?: string | null
           provider?: string | null
+          show_in_cashflow?: boolean
           total_cost?: number
           updated_at?: string
           user_id?: string
