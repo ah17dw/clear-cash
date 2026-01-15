@@ -520,11 +520,11 @@ export default function Cashflow() {
             {monthlyRenewals.map((renewal) => renderRenewalItem(renewal, false))}
             <div className="flex items-center justify-between pt-2 font-medium border-t border-border">
               <p>Subtotal</p>
-              <AmountDisplay amount={adjustedMonthlyExpensesTotal} size="sm" />
+              <AmountDisplay amount={adjustedMonthlyExpensesTotal + renewalsMonthlyTotal} size="sm" />
             </div>
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <p>Annual equivalent</p>
-              <p>£{(adjustedMonthlyExpensesTotal * 12).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/yr</p>
+              <p>£{((adjustedMonthlyExpensesTotal + renewalsMonthlyTotal) * 12).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/yr</p>
             </div>
           </div>
         ) : (
@@ -559,11 +559,11 @@ export default function Cashflow() {
             {annualRenewals.map((renewal) => renderRenewalItem(renewal, true))}
             <div className="flex items-center justify-between pt-2 font-medium border-t border-border">
               <p>Subtotal (Annual)</p>
-              <AmountDisplay amount={adjustedAnnualExpensesTotal} size="sm" />
+              <AmountDisplay amount={adjustedAnnualExpensesTotal + renewalsAnnualTotal} size="sm" />
             </div>
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <p>Monthly equivalent</p>
-              <p>£{annualAsMonthly.toFixed(2)}/mo</p>
+              <p>£{(annualAsMonthly + renewalsAnnualAsMonthly).toFixed(2)}/mo</p>
             </div>
           </div>
         ) : (
