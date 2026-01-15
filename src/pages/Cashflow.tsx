@@ -111,7 +111,18 @@ export default function Cashflow() {
     }, 0) ?? 0;
   }, [debts]);
 
-  const totalMonthlyOutgoings = adjustedMonthlyExpensesTotal + adjustedDebtPaymentsTotal + annualAsMonthly;
+  // Renewals reflected in cashflow - add their monthly amounts to totals
+  const renewalsMonthlyTotal = useMemo(() => {
+    return monthlyRenewals.reduce((sum, r) => sum + Number(r.monthly_amount), 0);
+  }, [monthlyRenewals]);
+
+  const renewalsAnnualTotal = useMemo(() => {
+    return annualRenewals.reduce((sum, r) => sum + Number(r.total_cost), 0);
+  }, [annualRenewals]);
+
+  const renewalsAnnualAsMonthly = renewalsAnnualTotal / 12;
+
+  const totalMonthlyOutgoings = adjustedMonthlyExpensesTotal + adjustedDebtPaymentsTotal + annualAsMonthly + renewalsMonthlyTotal + renewalsAnnualAsMonthly;
   const surplus = totalIncome - totalMonthlyOutgoings;
 
   // Sorted expenses
@@ -299,18 +310,18 @@ export default function Cashflow() {
     );
   };
 
-  // Render a renewal item (for display in cashflow - shows as £0 info row)
+  // Render a renewal item (for display in cashflow - shows actual amount)
   const renderRenewalItem = (renewal: Renewal, isAnnual: boolean = false) => {
     const amount = isAnnual ? Number(renewal.total_cost) : Number(renewal.monthly_amount);
     
     return (
       <div
         key={`renewal-${renewal.id}`}
-        className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 bg-card opacity-60 cursor-pointer hover:bg-muted/50 transition-colors"
+        className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 bg-card cursor-pointer hover:bg-muted/50 transition-colors"
         onClick={() => navigate('/renewals')}
       >
         <div className="flex items-center gap-3 flex-1">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm bg-muted text-muted-foreground">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm bg-primary/20 text-primary">
             <FileText className="h-4 w-4" />
           </div>
           <div>
@@ -320,16 +331,18 @@ export default function Cashflow() {
                 Renewal
               </span>
             </p>
-            <p className="text-xs text-muted-foreground italic">
-              Tracked in Renewals (£{amount.toFixed(2)})
+            <p className="text-xs text-muted-foreground">
+              {renewal.provider || 'Subscription'}
             </p>
           </div>
         </div>
         <div className="text-right">
-          <span className="text-xs text-muted-foreground">£0</span>
-          <p className="text-[10px] text-muted-foreground">
-            (info only)
-          </p>
+          <AmountDisplay amount={amount} size="sm" />
+          {isAnnual && (
+            <p className="text-[10px] text-muted-foreground">
+              £{(amount / 12).toFixed(0)}/mo
+            </p>
+          )}
         </div>
       </div>
     );
