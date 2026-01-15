@@ -293,9 +293,13 @@ export default function Cashflow() {
                       £{fullAmount.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </p>
                   )}
-                  {isAnnual && (
+                  {isAnnual ? (
                     <p className="text-[10px] text-muted-foreground">
                       £{(displayAmount / 12).toFixed(0)}/mo
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground italic">
+                      ≈ £{(displayAmount * 12).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/yr
                     </p>
                   )}
                 </>
