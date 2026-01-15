@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Sparkles, Loader2 } from 'lucide-react';
+import { CalendarIcon, Sparkles, Loader2, Plus, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import {
@@ -25,10 +25,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useCreateExpenseItem, useUpdateExpenseItem } from '@/hooks/useFinanceData';
+import { useSubExpenses, useCreateSubExpense, useDeleteSubExpense } from '@/hooks/useSubExpenses';
 import { ExpenseItem, EXPENSE_CATEGORIES } from '@/types/finance';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/format';
+import { AmountDisplay } from '@/components/ui/amount-display';
 
 const expenseSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -48,6 +50,13 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
   const createExpense = useCreateExpenseItem();
   const updateExpense = useUpdateExpenseItem();
   const isEditing = !!expense;
+  
+  // Sub-expenses hooks (only fetch when editing)
+  const { data: subExpenses } = useSubExpenses(expense?.id ?? '');
+  const createSubExpense = useCreateSubExpense();
+  const deleteSubExpense = useDeleteSubExpense();
+  const [newSubName, setNewSubName] = useState('');
+  const [newSubAmount, setNewSubAmount] = useState('');
 
   const [isTemporary, setIsTemporary] = useState(false);
   const [startDate, setStartDate] = useState<Date | undefined>();
@@ -83,10 +92,8 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
       setIsMonthly(expenseIsMonthly);
       reset({
         name: expense.name,
-        // Display as annual amount in the form
-        amount: expenseIsMonthly 
-          ? Number(expense.monthly_amount) * 12 
-          : Number(expense.monthly_amount),
+        // Display amount as stored - monthly_amount stores what user entered
+        amount: Number(expense.monthly_amount),
         category: expense.category ?? 'other',
       });
       setStartDate(expense.start_date ? new Date(expense.start_date) : undefined);
@@ -107,8 +114,23 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
       setIsTemporary(false);
       setIsMonthly(false);
       setUploadedFile(null);
+      setNewSubName('');
+      setNewSubAmount('');
     }
   }, [expense, reset, open]);
+
+  const handleAddSubExpense = async () => {
+    if (!expense || !newSubName.trim()) return;
+    
+    await createSubExpense.mutateAsync({
+      parent_expense_id: expense.id,
+      name: newSubName.trim(),
+      monthly_amount: parseFloat(newSubAmount) || 0,
+    });
+    
+    setNewSubName('');
+    setNewSubAmount('');
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -173,8 +195,8 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
   };
 
   const onSubmit = async (data: ExpenseFormData) => {
-    // Convert to monthly amount for storage
-    const monthlyAmount = isMonthly ? data.amount : data.amount / 12;
+    // Store exactly what user entered - monthly_amount is used directly
+    const monthlyAmount = data.amount;
     const frequency: 'monthly' | 'annual' = isMonthly ? 'monthly' : 'annual';
     
     const parsedPaymentDay = paymentDay ? parseInt(paymentDay, 10) : null;
@@ -289,17 +311,24 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
 
           {/* Payment Day */}
           <div className="space-y-2">
-            <Label htmlFor="payment_day">Payment Day</Label>
-            <Input
-              id="payment_day"
-              type="number"
-              min="1"
-              max="31"
+            <Label>Payment Day</Label>
+            <Select
               value={paymentDay}
-              onChange={(e) => setPaymentDay(e.target.value)}
-              placeholder="e.g. 15"
-            />
-            <p className="text-xs text-muted-foreground">Day of month when payment leaves your bank (1-31)</p>
+              onValueChange={setPaymentDay}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select day" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">No specific day</SelectItem>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                  <SelectItem key={day} value={day.toString()}>
+                    {day}{day === 1 ? 'st' : day === 2 ? 'nd' : day === 3 ? 'rd' : 'th'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">Day of month when payment leaves your bank</p>
           </div>
 
           {/* Renewal/Contract End Date */}
@@ -412,6 +441,77 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
                   </PopoverContent>
                 </Popover>
               </div>
+            </div>
+          )}
+
+          {/* Sub-expenses section - only show when editing */}
+          {isEditing && (
+            <div className="space-y-3 pt-2 border-t">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Sub-expenses</Label>
+                {subExpenses && subExpenses.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    Total: {formatCurrency(subExpenses.reduce((sum, s) => sum + Number(s.monthly_amount), 0))}
+                  </span>
+                )}
+              </div>
+              
+              {/* Add sub-expense */}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Name (e.g., Electric)"
+                  value={newSubName}
+                  onChange={(e) => setNewSubName(e.target.value)}
+                  className="flex-1"
+                />
+                <Input
+                  type="number"
+                  placeholder="£"
+                  value={newSubAmount}
+                  onChange={(e) => setNewSubAmount(e.target.value)}
+                  className="w-20"
+                  step="0.01"
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  onClick={handleAddSubExpense}
+                  disabled={!newSubName.trim() || createSubExpense.isPending}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              {/* List sub-expenses */}
+              {subExpenses && subExpenses.length > 0 ? (
+                <div className="space-y-1">
+                  {subExpenses.map((sub) => (
+                    <div
+                      key={sub.id}
+                      className="flex items-center justify-between py-1.5 px-2 bg-muted/50 rounded"
+                    >
+                      <span className="text-sm">{sub.name}</span>
+                      <div className="flex items-center gap-2">
+                        <AmountDisplay amount={Number(sub.monthly_amount)} size="sm" />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 text-destructive"
+                          onClick={() => deleteSubExpense.mutate({ id: sub.id, parent_expense_id: expense.id })}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground text-center py-2">
+                  No sub-expenses. Add items like Water, Electric, etc.
+                </p>
+              )}
             </div>
           )}
 
