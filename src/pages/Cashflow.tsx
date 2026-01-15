@@ -1,7 +1,7 @@
-// Cashflow page - last updated: 2026-01-15 v2
-import { useState, useMemo, useEffect } from 'react';
+// Cashflow page - last updated: 2026-01-15 v3
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownCircle, ArrowUpCircle, Plus, Users, ArrowUpDown, ChevronRight, CalendarDays, CalendarClock } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Plus, Users, ArrowUpDown, ChevronRight, CalendarDays, CalendarClock, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
@@ -20,6 +20,7 @@ import {
   useCreateIncomeSource,
 } from '@/hooks/useFinanceData';
 import { useAllSubExpenses } from '@/hooks/useSubExpenses';
+import { useRenewals, Renewal } from '@/hooks/useRenewals';
 import { IncomeFormSheet } from '@/components/cashflow/IncomeFormSheet';
 import { ExpenseFormSheet } from '@/components/cashflow/ExpenseFormSheet';
 import { SubExpenseSheet } from '@/components/cashflow/SubExpenseSheet';
@@ -34,6 +35,7 @@ export default function Cashflow() {
   const { data: expenses } = useExpenseItems();
   const { data: debts } = useDebts();
   const { data: allSubExpenses } = useAllSubExpenses();
+  const { data: renewals } = useRenewals();
   
   const deleteIncome = useDeleteIncomeSource();
   const deleteExpense = useDeleteExpenseItem();
@@ -69,6 +71,14 @@ export default function Cashflow() {
     const annual = expenses?.filter(e => e.frequency === 'annual') ?? [];
     return { monthlyExpenses: monthly, annualExpenses: annual };
   }, [expenses]);
+
+  // Renewals marked to show in cashflow (split by frequency)
+  const { monthlyRenewals, annualRenewals } = useMemo(() => {
+    const visible = renewals?.filter(r => r.added_to_expenses) ?? [];
+    const monthly = visible.filter(r => r.frequency === 'monthly' || r.is_monthly_payment);
+    const annual = visible.filter(r => r.frequency === 'annually' && !r.is_monthly_payment);
+    return { monthlyRenewals: monthly, annualRenewals: annual };
+  }, [renewals]);
 
   // Calculate adjusted expenses (per-item, persisted per expense)
   // Exclude linked expenses from totals (they're accounted for in their parent)
@@ -287,6 +297,42 @@ export default function Cashflow() {
     );
   };
 
+  // Render a renewal item (for display in cashflow - shows as £0 info row)
+  const renderRenewalItem = (renewal: Renewal, isAnnual: boolean = false) => {
+    const amount = isAnnual ? Number(renewal.total_cost) : Number(renewal.monthly_amount);
+    
+    return (
+      <div
+        key={`renewal-${renewal.id}`}
+        className="flex items-center justify-between py-2 px-2 border-b border-border last:border-0 bg-card opacity-60 cursor-pointer hover:bg-muted/50 transition-colors"
+        onClick={() => navigate('/renewals')}
+      >
+        <div className="flex items-center gap-3 flex-1">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm bg-muted text-muted-foreground">
+            <FileText className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-sm flex items-center gap-1">
+              {renewal.name}
+              <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full">
+                Renewal
+              </span>
+            </p>
+            <p className="text-xs text-muted-foreground italic">
+              Tracked in Renewals (£{amount.toFixed(2)})
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <span className="text-xs text-muted-foreground">£0</span>
+          <p className="text-[10px] text-muted-foreground">
+            (info only)
+          </p>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="page-container">
       <PageHeader title="Cashflow" />
@@ -423,9 +469,10 @@ export default function Cashflow() {
           </Button>
         </div>
 
-        {sortedMonthlyExpenses.length > 0 ? (
+        {(sortedMonthlyExpenses.length > 0 || monthlyRenewals.length > 0) ? (
           <div className="space-y-1">
             {sortedMonthlyExpenses.map((expense) => renderExpenseItem(expense, false))}
+            {monthlyRenewals.map((renewal) => renderRenewalItem(renewal, false))}
             <div className="flex items-center justify-between pt-2 font-medium border-t border-border">
               <p>Subtotal</p>
               <AmountDisplay amount={adjustedMonthlyExpensesTotal} size="sm" />
@@ -461,9 +508,10 @@ export default function Cashflow() {
           </Button>
         </div>
 
-        {sortedAnnualExpenses.length > 0 ? (
+        {(sortedAnnualExpenses.length > 0 || annualRenewals.length > 0) ? (
           <div className="space-y-1">
             {sortedAnnualExpenses.map((expense) => renderExpenseItem(expense, true))}
+            {annualRenewals.map((renewal) => renderRenewalItem(renewal, true))}
             <div className="flex items-center justify-between pt-2 font-medium border-t border-border">
               <p>Subtotal (Annual)</p>
               <AmountDisplay amount={adjustedAnnualExpensesTotal} size="sm" />
