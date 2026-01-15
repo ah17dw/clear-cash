@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Sparkles, Loader2, Plus, Trash2 } from 'lucide-react';
+import { CalendarIcon, Sparkles, Loader2, Plus, Trash2, Link } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import {
@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useCreateExpenseItem, useUpdateExpenseItem } from '@/hooks/useFinanceData';
+import { useCreateExpenseItem, useUpdateExpenseItem, useExpenseItems } from '@/hooks/useFinanceData';
 import { useSubExpenses, useCreateSubExpense, useDeleteSubExpense } from '@/hooks/useSubExpenses';
 import { ExpenseItem, EXPENSE_CATEGORIES } from '@/types/finance';
 import { supabase } from '@/integrations/supabase/client';
@@ -50,6 +50,7 @@ interface ExpenseFormSheetProps {
 export function ExpenseFormSheet({ open, onOpenChange, expense, readOnly = false }: ExpenseFormSheetProps) {
   const createExpense = useCreateExpenseItem();
   const updateExpense = useUpdateExpenseItem();
+  const { data: allExpenses } = useExpenseItems();
   const isEditing = !!expense;
   
   // Sub-expenses hooks (only fetch when editing)
@@ -68,6 +69,22 @@ export function ExpenseFormSheet({ open, onOpenChange, expense, readOnly = false
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [linkedParentId, setLinkedParentId] = useState<string | null>(null);
+
+  // Get available parent expenses (exclude current expense and already-linked expenses)
+  const availableParentExpenses = useMemo(() => {
+    if (!allExpenses) return [];
+    return allExpenses.filter(e => 
+      e.id !== expense?.id && // Can't link to self
+      !e.linked_parent_id // Can't link to something that's already linked
+    );
+  }, [allExpenses, expense?.id]);
+
+  // Get the parent expense name for display
+  const linkedParentName = useMemo(() => {
+    if (!linkedParentId || !allExpenses) return null;
+    return allExpenses.find(e => e.id === linkedParentId)?.name ?? null;
+  }, [linkedParentId, allExpenses]);
 
   const {
     register,
@@ -102,6 +119,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense, readOnly = false
       setRenewalDate(expense.renewal_date ? new Date(expense.renewal_date) : undefined);
       setPaymentDay(expense.payment_day?.toString() ?? '');
       setIsTemporary(!!(expense.start_date || expense.end_date));
+      setLinkedParentId(expense.linked_parent_id ?? null);
     } else {
       reset({
         name: '',
@@ -117,6 +135,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense, readOnly = false
       setUploadedFile(null);
       setNewSubName('');
       setNewSubAmount('');
+      setLinkedParentId(null);
     }
   }, [expense, reset, open]);
 
@@ -211,6 +230,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense, readOnly = false
       payment_day: parsedPaymentDay && parsedPaymentDay >= 1 && parsedPaymentDay <= 31 ? parsedPaymentDay : null,
       start_date: isTemporary && startDate ? format(startDate, 'yyyy-MM-dd') : null,
       end_date: isTemporary && endDate ? format(endDate, 'yyyy-MM-dd') : null,
+      linked_parent_id: linkedParentId,
     };
 
     if (isEditing) {
@@ -470,6 +490,39 @@ export function ExpenseFormSheet({ open, onOpenChange, expense, readOnly = false
               </div>
             </div>
           )}
+
+          {/* Link to Parent Expense */}
+          <div className="space-y-2 p-3 rounded-lg bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Link className="h-4 w-4 text-muted-foreground" />
+              <Label>Included in another expense?</Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Link this expense to a parent if it's already accounted for elsewhere (e.g., Netflix included in Joint Card). It will show as £0 in totals.
+            </p>
+            {readOnly ? (
+              <p className="text-sm py-2 px-3 rounded-md bg-muted">
+                {linkedParentName ? `Included in: ${linkedParentName}` : 'Not linked'}
+              </p>
+            ) : (
+              <Select
+                value={linkedParentId || 'none'}
+                onValueChange={(v) => setLinkedParentId(v === 'none' ? null : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select parent expense" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not linked (counts in totals)</SelectItem>
+                  {availableParentExpenses.map((exp) => (
+                    <SelectItem key={exp.id} value={exp.id}>
+                      {exp.name} (£{Number(exp.monthly_amount).toFixed(0)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
 
           {/* Sub-expenses section - only show when editing or viewing */}
           {(isEditing || readOnly) && expense && (
