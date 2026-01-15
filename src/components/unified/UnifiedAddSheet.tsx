@@ -710,6 +710,7 @@ function RenewalFormInline({ onClose }: { onClose: () => void }) {
       added_to_expenses: false,
       linked_expense_id: null,
       show_in_cashflow: false,
+      couples_mode: false,
     });
     onClose();
   };

@@ -21,6 +21,7 @@ export interface Renewal {
   show_in_cashflow: boolean;
   linked_expense_id: string | null;
   person_or_address: string | null;
+  couples_mode: boolean;
   created_at: string;
   updated_at: string;
 }

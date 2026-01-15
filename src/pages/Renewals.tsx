@@ -138,6 +138,7 @@ export default function Renewals() {
       added_to_expenses: false,
       linked_expense_id: null,
       show_in_cashflow: false,
+      couples_mode: renewal.couples_mode,
     });
   };
 

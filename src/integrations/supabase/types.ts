@@ -379,6 +379,7 @@ export type Database = {
           added_to_expenses: boolean
           agreement_end: string | null
           agreement_start: string | null
+          couples_mode: boolean
           created_at: string
           file_name: string | null
           file_url: string | null
@@ -400,6 +401,7 @@ export type Database = {
           added_to_expenses?: boolean
           agreement_end?: string | null
           agreement_start?: string | null
+          couples_mode?: boolean
           created_at?: string
           file_name?: string | null
           file_url?: string | null
@@ -421,6 +423,7 @@ export type Database = {
           added_to_expenses?: boolean
           agreement_end?: string | null
           agreement_start?: string | null
+          couples_mode?: boolean
           created_at?: string
           file_name?: string | null
           file_url?: string | null

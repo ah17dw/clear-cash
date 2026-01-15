@@ -235,6 +235,7 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
       added_to_expenses: renewal?.added_to_expenses ?? false,
       linked_expense_id: renewal?.linked_expense_id ?? null,
       show_in_cashflow: showInCashflow,
+      couples_mode: renewal?.couples_mode ?? false,
     };
 
     try {
