@@ -12,6 +12,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Sparkles, Loader2, FileText, Trash2, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -62,6 +72,8 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
   const [notes, setNotes] = useState('');
   const [personOrAddress, setPersonOrAddress] = useState('');
   const [showInCashflow, setShowInCashflow] = useState(false);
+  const [cashflowDialogOpen, setCashflowDialogOpen] = useState(false);
+  const [pendingCashflowValue, setPendingCashflowValue] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedText, setExtractedText] = useState('');
@@ -492,14 +504,45 @@ export function RenewalFormSheet({ open, onOpenChange, renewal }: RenewalFormShe
               <div>
                 <Label>Show in Cashflow</Label>
                 <p className="text-xs text-muted-foreground">
-                  Display this renewal in Cashflow (won't duplicate totals)
+                  {showInCashflow ? 'Value is reflected in Cashflow' : 'Value is not shown in Cashflow'}
                 </p>
               </div>
               <Switch
                 checked={showInCashflow}
-                onCheckedChange={setShowInCashflow}
+                onCheckedChange={(checked) => {
+                  setPendingCashflowValue(checked);
+                  setCashflowDialogOpen(true);
+                }}
               />
             </div>
+
+            {/* Cashflow Confirmation Dialog */}
+            <AlertDialog open={cashflowDialogOpen} onOpenChange={setCashflowDialogOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {pendingCashflowValue ? 'Reflect in Cashflow?' : 'Retract from Cashflow?'}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {pendingCashflowValue 
+                      ? 'This will add the renewal value to your Cashflow expenses view. The monthly amount will be visible in your cashflow summary.'
+                      : 'This will remove the renewal value from your Cashflow expenses view. The amount will no longer be reflected in your cashflow summary.'
+                    }
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      setShowInCashflow(pendingCashflowValue);
+                      setCashflowDialogOpen(false);
+                    }}
+                  >
+                    {pendingCashflowValue ? 'Reflect Value' : 'Retract Value'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
 
             <div className="space-y-2">
               <Label>Notes</Label>
