@@ -52,6 +52,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
   const [isTemporary, setIsTemporary] = useState(false);
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
+  const [renewalDate, setRenewalDate] = useState<Date | undefined>();
   const [isMonthly, setIsMonthly] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -89,6 +90,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
       });
       setStartDate(expense.start_date ? new Date(expense.start_date) : undefined);
       setEndDate(expense.end_date ? new Date(expense.end_date) : undefined);
+      setRenewalDate(expense.renewal_date ? new Date(expense.renewal_date) : undefined);
       setIsTemporary(!!(expense.start_date || expense.end_date));
     } else {
       reset({
@@ -98,6 +100,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
       });
       setStartDate(undefined);
       setEndDate(undefined);
+      setRenewalDate(undefined);
       setIsTemporary(false);
       setIsMonthly(false);
       setUploadedFile(null);
@@ -176,6 +179,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
       monthly_amount: monthlyAmount,
       category: data.category || null,
       frequency,
+      renewal_date: renewalDate ? format(renewalDate, 'yyyy-MM-dd') : null,
       start_date: isTemporary && startDate ? format(startDate, 'yyyy-MM-dd') : null,
       end_date: isTemporary && endDate ? format(endDate, 'yyyy-MM-dd') : null,
     };
@@ -275,6 +279,32 @@ export function ExpenseFormSheet({ open, onOpenChange, expense }: ExpenseFormShe
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Renewal/Due Date */}
+          <div className="space-y-2">
+            <Label>Renewal / Due Date</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn('w-full justify-start', !renewalDate && 'text-muted-foreground')}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {renewalDate ? format(renewalDate, 'dd/MM/yyyy') : 'Select date'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={renewalDate}
+                  onSelect={setRenewalDate}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            <p className="text-xs text-muted-foreground">When is this expense due or up for renewal?</p>
           </div>
 
           {/* Monthly Toggle */}
