@@ -24,16 +24,21 @@ export function FinancialInsightsCard({ summary }: FinancialInsightsCardProps) {
   const [spendingCategories, setSpendingCategories] = useState<SpendingCategory[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Calculate savings runway
+  // Calculate savings runway using net position (savings - debts)
   const savingsRunway = useMemo(() => {
-    const totalSavings = summary.totalSavings;
+    const netPosition = summary.netPosition; // savings minus debts
     const monthlyDeficit = summary.monthlySurplus < 0 ? Math.abs(summary.monthlySurplus) : 0;
     
     if (monthlyDeficit === 0) {
-      return null; // No deficit, savings growing
+      return { months: null, netPosition }; // No deficit, funds growing
     }
     
-    return Math.floor(totalSavings / monthlyDeficit);
+    // If net position is negative, runway is 0
+    if (netPosition <= 0) {
+      return { months: 0, netPosition };
+    }
+    
+    return { months: Math.floor(netPosition / monthlyDeficit), netPosition };
   }, [summary]);
 
   // Calculate projected annual interest
@@ -101,21 +106,28 @@ export function FinancialInsightsCard({ summary }: FinancialInsightsCardProps) {
       icon={<TrendingUp className="h-4 w-4" />}
     >
       <div className="space-y-4">
-        {/* Savings Runway */}
+        {/* Funds Runway */}
         <div className="p-3 rounded-lg bg-muted/50">
           <div className="flex items-center gap-2 mb-1">
             <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Savings Runway</span>
+            <span className="text-sm font-medium">Funds Runway</span>
           </div>
-          {savingsRunway !== null ? (
-            <p className="text-sm text-muted-foreground">
-              Your savings of <span className="text-savings font-medium">{formatCurrency(summary.totalSavings)}</span> will 
-              cover your monthly deficit of <span className="text-debt font-medium">{formatCurrency(Math.abs(summary.monthlySurplus))}</span> for 
-              approximately <span className="text-foreground font-bold">{savingsRunway} months</span>
-            </p>
+          {savingsRunway.months !== null ? (
+            savingsRunway.months <= 0 ? (
+              <p className="text-sm text-debt">
+                Your net position of <span className="font-medium">{formatCurrency(savingsRunway.netPosition)}</span> means 
+                you have no runway. Focus on paying down debt.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Your net position of <span className={savingsRunway.netPosition >= 0 ? "text-savings font-medium" : "text-debt font-medium"}>{formatCurrency(savingsRunway.netPosition)}</span> will 
+                cover your monthly deficit of <span className="text-debt font-medium">{formatCurrency(Math.abs(summary.monthlySurplus))}</span> for 
+                approximately <span className="text-foreground font-bold">{savingsRunway.months} months</span>
+              </p>
+            )
           ) : (
             <p className="text-sm text-savings">
-              You're in surplus! Your savings are growing each month.
+              You're in surplus! Your funds are growing each month.
             </p>
           )}
         </div>
