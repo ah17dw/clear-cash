@@ -47,17 +47,46 @@ serve(async (req) => {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
+        model: 'google/gemini-3-flash-preview',
         messages: [
           {
             role: 'system',
-            content: `You are a financial analyst. Analyze the user's spending items and group them into meaningful categories like "Housing", "Transport/Car", "Utilities", "Entertainment", "Groceries", "Insurance", etc. Return a JSON array of categories with their total monthly amounts. Be smart about grouping - items like "car insurance", "fuel", "car tax" should all go under "Transport/Car". Return ONLY valid JSON, no markdown.`
+            content: `You are a financial analyst. Analyze spending items and group them into meaningful categories.`
           },
           {
             role: 'user',
-            content: `Here are my monthly expenses:\n${itemsList}\n\nGroup these into categories and return JSON in this exact format: {"categories": [{"category": "Category Name", "monthlyTotal": 123.45}]}. Sort by highest spending first. Maximum 6 categories, combine smaller ones into "Other".`
+            content: `Here are my monthly expenses:\n${itemsList}\n\nGroup these into categories sorted by highest spending first. Maximum 6 categories, combine smaller ones into "Other".`
           }
         ],
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'categorize_spending',
+              description: 'Categorize spending items into groups with monthly totals',
+              parameters: {
+                type: 'object',
+                properties: {
+                  categories: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        category: { type: 'string', description: 'Category name like Housing, Transport, Utilities, Entertainment' },
+                        monthlyTotal: { type: 'number', description: 'Total monthly amount for this category' }
+                      },
+                      required: ['category', 'monthlyTotal'],
+                      additionalProperties: false
+                    }
+                  }
+                },
+                required: ['categories'],
+                additionalProperties: false
+              }
+            }
+          }
+        ],
+        tool_choice: { type: 'function', function: { name: 'categorize_spending' } },
       }),
     });
 
@@ -70,21 +99,27 @@ serve(async (req) => {
     const aiResult = await response.json();
     console.log('AI response:', aiResult);
 
-    const content = aiResult.choices?.[0]?.message?.content || '';
+    // Extract from tool call response
+    const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
+    let parsed = { categories: [] };
     
-    // Parse the JSON from the response
-    let parsed;
-    try {
-      // Try to extract JSON from the response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
-      } else {
-        parsed = JSON.parse(content);
+    if (toolCall?.function?.arguments) {
+      try {
+        parsed = JSON.parse(toolCall.function.arguments);
+      } catch (parseError) {
+        console.error('Failed to parse tool call:', toolCall.function.arguments);
       }
-    } catch (parseError) {
-      console.error('Failed to parse AI response:', content);
-      parsed = { categories: [] };
+    } else {
+      // Fallback: try to parse content if no tool call
+      const content = aiResult.choices?.[0]?.message?.content || '';
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[0]);
+        }
+      } catch (parseError) {
+        console.error('Failed to parse content:', content);
+      }
     }
 
     return new Response(
