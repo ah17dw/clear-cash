@@ -15,6 +15,7 @@ export interface Debt {
   minimum_payment: number;
   planned_payment: number | null;
   notes: string | null;
+  bank_account: string | null;
   created_at: string;
   updated_at: string;
 }

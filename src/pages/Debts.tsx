@@ -32,6 +32,7 @@ interface Debt {
   post_promo_apr: number | null;
   lender: string | null;
   notes: string | null;
+  bank_account: string | null;
   created_at: string;
   updated_at: string;
   user_id: string;
@@ -114,6 +115,7 @@ export default function Debts() {
       post_promo_apr: debt.post_promo_apr,
       lender: debt.lender,
       notes: debt.notes,
+      bank_account: debt.bank_account,
     });
   };
 

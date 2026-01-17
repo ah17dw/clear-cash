@@ -591,6 +591,7 @@ function DebtFormInline({ onClose }: { onClose: () => void }) {
       payment_day: null,
       planned_payment: data.planned_payment ?? null,
       notes: data.notes || null,
+      bank_account: null,
     });
     onClose();
   };

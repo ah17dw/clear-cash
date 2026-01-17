@@ -107,6 +107,7 @@ export type Database = {
         Row: {
           apr: number
           balance: number
+          bank_account: string | null
           created_at: string
           id: string
           is_promo_0: boolean
@@ -127,6 +128,7 @@ export type Database = {
         Insert: {
           apr?: number
           balance?: number
+          bank_account?: string | null
           created_at?: string
           id?: string
           is_promo_0?: boolean
@@ -147,6 +149,7 @@ export type Database = {
         Update: {
           apr?: number
           balance?: number
+          bank_account?: string | null
           created_at?: string
           id?: string
           is_promo_0?: boolean
