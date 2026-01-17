@@ -14,11 +14,19 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useCreateIncomeSource, useUpdateIncomeSource } from '@/hooks/useFinanceData';
 import { IncomeSource } from '@/types/finance';
+import { BANK_ACCOUNTS } from '@/types/bank-accounts';
 import { formatCurrency } from '@/lib/format';
 
 const incomeSchema = z.object({
@@ -44,6 +52,8 @@ export function IncomeFormSheet({ open, onOpenChange, income, readOnly = false }
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
   const [isMonthly, setIsMonthly] = useState(false);
+  const [bankAccount, setBankAccount] = useState<string | null>(null);
+  const [paymentDay, setPaymentDay] = useState<string>('');
 
   const {
     register,
@@ -77,6 +87,8 @@ export function IncomeFormSheet({ open, onOpenChange, income, readOnly = false }
       setStartDate(income.start_date ? new Date(income.start_date) : undefined);
       setEndDate(income.end_date ? new Date(income.end_date) : undefined);
       setIsTemporary(!!(income.start_date || income.end_date));
+      setBankAccount(income.bank_account ?? null);
+      setPaymentDay(income.payment_day?.toString() ?? '');
     } else {
       reset({
         name: '',
@@ -86,18 +98,23 @@ export function IncomeFormSheet({ open, onOpenChange, income, readOnly = false }
       setEndDate(undefined);
       setIsTemporary(false);
       setIsMonthly(false);
+      setBankAccount(null);
+      setPaymentDay('');
     }
   }, [income, reset, open]);
 
   const onSubmit = async (data: IncomeFormData) => {
     // Convert to monthly amount for storage
     const monthlyAmount = isMonthly ? data.amount : data.amount / 12;
+    const parsedPaymentDay = paymentDay ? parseInt(paymentDay, 10) : null;
     
     const payload = {
       name: data.name,
       monthly_amount: monthlyAmount,
       start_date: isTemporary && startDate ? format(startDate, 'yyyy-MM-dd') : null,
       end_date: isTemporary && endDate ? format(endDate, 'yyyy-MM-dd') : null,
+      bank_account: bankAccount,
+      payment_day: parsedPaymentDay && parsedPaymentDay >= 1 && parsedPaymentDay <= 31 ? parsedPaymentDay : null,
     };
     if (isEditing) {
       await updateIncome.mutateAsync({ id: income.id, ...payload });
@@ -140,6 +157,62 @@ export function IncomeFormSheet({ open, onOpenChange, income, readOnly = false }
                 = {formatCurrency(monthlyEquivalent)}/month
               </p>
             )}
+          </div>
+
+          {/* Bank Account Selection */}
+          <div className="space-y-2">
+            <Label>Bank Account</Label>
+            {readOnly ? (
+              <p className="text-sm py-2 px-3 rounded-md bg-muted">
+                {BANK_ACCOUNTS.find(b => b.value === bankAccount)?.label ?? 'Not set'}
+              </p>
+            ) : (
+              <Select
+                value={bankAccount || 'none'}
+                onValueChange={(v) => setBankAccount(v === 'none' ? null : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select account" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not specified</SelectItem>
+                  {BANK_ACCOUNTS.map((acc) => (
+                    <SelectItem key={acc.value} value={acc.value}>
+                      {acc.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <p className="text-xs text-muted-foreground">Which account does this income go into?</p>
+          </div>
+
+          {/* Payment Day */}
+          <div className="space-y-2">
+            <Label>Payment Day</Label>
+            {readOnly ? (
+              <p className="text-sm py-2 px-3 rounded-md bg-muted">
+                {paymentDay ? `${paymentDay}${paymentDay === '1' ? 'st' : paymentDay === '2' ? 'nd' : paymentDay === '3' ? 'rd' : 'th'}` : 'Not set'}
+              </p>
+            ) : (
+              <Select
+                value={paymentDay || 'none'}
+                onValueChange={(v) => setPaymentDay(v === 'none' ? '' : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select day" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No specific day</SelectItem>
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                    <SelectItem key={day} value={day.toString()}>
+                      {day}{day === 1 ? 'st' : day === 2 ? 'nd' : day === 3 ? 'rd' : 'th'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <p className="text-xs text-muted-foreground">Day of month when you receive this income</p>
           </div>
 
           {/* Monthly Toggle */}

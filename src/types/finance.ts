@@ -59,6 +59,8 @@ export interface IncomeSource {
   monthly_amount: number;
   start_date?: string | null;
   end_date?: string | null;
+  bank_account?: string | null;
+  payment_day?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -80,6 +82,7 @@ export interface ExpenseItem {
   end_date?: string | null;
   frequency?: 'monthly' | 'annual';
   linked_parent_id?: string | null;
+  bank_account?: string | null;
   created_at: string;
   updated_at: string;
 }
