@@ -190,6 +190,41 @@ export default function Cashflow() {
     });
   }, [debts, sortBy]);
 
+  // Calculate outgoings by bank account
+  const outgoingsByAccount = useMemo(() => {
+    const accountTotals: Record<string, number> = {};
+    
+    // Add expenses
+    expenses?.forEach(expense => {
+      if (expense.linked_parent_id) return; // Skip linked expenses
+      const account = expense.bank_account || 'unassigned';
+      const multiplier = expense.couples_mode ? 0.5 : 1;
+      const amount = Number(expense.monthly_amount) * multiplier;
+      // For annual expenses, use monthly equivalent
+      const monthlyAmount = expense.frequency === 'annual' ? amount / 12 : amount;
+      accountTotals[account] = (accountTotals[account] || 0) + monthlyAmount;
+    });
+    
+    // Add debts
+    debts?.forEach(debt => {
+      const account = debt.bank_account || 'unassigned';
+      const payment = Number(debt.planned_payment) || Number(debt.minimum_payment);
+      accountTotals[account] = (accountTotals[account] || 0) + payment;
+    });
+    
+    // Add income (as positive for tracking, but we'll display separately)
+    // For now, just outgoings
+    
+    // Convert to sorted array
+    return Object.entries(accountTotals)
+      .map(([account, total]) => ({
+        account,
+        label: getBankAccountLabel(account) || 'Unassigned',
+        total
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [expenses, debts]);
+
   const getCategoryLabel = (value: string | null) => {
     return EXPENSE_CATEGORIES.find((c) => c.value === value)?.label ?? value ?? 'Other';
   };
@@ -719,7 +754,41 @@ export default function Cashflow() {
         </div>
       )}
 
-      <IncomeFormSheet 
+      {/* Bank Account Summary */}
+      {outgoingsByAccount.length > 0 && (
+        <div className="finance-card mt-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Outgoings by Account</p>
+          </div>
+          <div className="space-y-2">
+            {outgoingsByAccount.map(({ account, label, total }) => (
+              <div 
+                key={account} 
+                className="flex items-center justify-between py-2 px-2 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted transition-colors"
+                onClick={() => setBankAccountFilter(account === 'unassigned' ? null : account)}
+              >
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {label}
+                  </Badge>
+                </div>
+                <div className="text-right">
+                  <AmountDisplay amount={total} size="sm" />
+                  <p className="text-[10px] text-muted-foreground">
+                    {((total / totalMonthlyOutgoings) * 100).toFixed(0)}% of total
+                  </p>
+                </div>
+              </div>
+            ))}
+            <div className="flex items-center justify-between pt-2 font-medium border-t border-border">
+              <p>Total Outgoings</p>
+              <AmountDisplay amount={totalMonthlyOutgoings} size="sm" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <IncomeFormSheet
         open={showIncomeForm} 
         onOpenChange={setShowIncomeForm}
         income={editingIncome}
