@@ -1,14 +1,22 @@
-// Cashflow page - last updated: 2026-01-15 v4
+// Cashflow page - last updated: 2026-01-17 v5
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownCircle, ArrowUpCircle, Plus, Users, ArrowUpDown, ChevronRight, CalendarDays, CalendarClock, FileText } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Plus, Users, ArrowUpDown, ChevronRight, CalendarDays, CalendarClock, FileText, Check, Clock, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { 
   useIncomeSources, 
   useExpenseItems, 
@@ -27,6 +35,7 @@ import { SubExpenseSheet } from '@/components/cashflow/SubExpenseSheet';
 import { FinanceCalendar } from '@/components/finance/FinanceCalendar';
 import { UnifiedAddSheet } from '@/components/unified/UnifiedAddSheet';
 import { EXPENSE_CATEGORIES, IncomeSource, ExpenseItem } from '@/types/finance';
+import { BANK_ACCOUNTS, getBankAccountLabel } from '@/types/bank-accounts';
 
 type SortOption = 'due' | 'value';
 
@@ -57,6 +66,7 @@ export default function Cashflow() {
   const [showCalendar, setShowCalendar] = useState(false);
   
   const [sortBy, setSortBy] = useState<SortOption>('value');
+  const [bankAccountFilter, setBankAccountFilter] = useState<string | null>(null);
 
   // Delete confirmation state
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -132,24 +142,35 @@ export default function Cashflow() {
   const totalMonthlyOutgoings = adjustedMonthlyExpensesTotal + adjustedDebtPaymentsTotal + annualAsMonthly + renewalsMonthlyTotal + renewalsAnnualAsMonthly;
   const surplus = totalIncome - totalMonthlyOutgoings;
 
+  // Filtered expenses by bank account
+  const filteredMonthlyExpenses = useMemo(() => {
+    if (!bankAccountFilter) return monthlyExpenses;
+    return monthlyExpenses.filter(e => e.bank_account === bankAccountFilter);
+  }, [monthlyExpenses, bankAccountFilter]);
+
+  const filteredAnnualExpenses = useMemo(() => {
+    if (!bankAccountFilter) return annualExpenses;
+    return annualExpenses.filter(e => e.bank_account === bankAccountFilter);
+  }, [annualExpenses, bankAccountFilter]);
+
   // Sorted expenses
   const sortedMonthlyExpenses = useMemo(() => {
-    return [...monthlyExpenses].sort((a, b) => {
+    return [...filteredMonthlyExpenses].sort((a, b) => {
       if (sortBy === 'value') {
         return Number(b.monthly_amount) - Number(a.monthly_amount);
       }
       return a.name.localeCompare(b.name);
     });
-  }, [monthlyExpenses, sortBy]);
+  }, [filteredMonthlyExpenses, sortBy]);
 
   const sortedAnnualExpenses = useMemo(() => {
-    return [...annualExpenses].sort((a, b) => {
+    return [...filteredAnnualExpenses].sort((a, b) => {
       if (sortBy === 'value') {
         return Number(b.monthly_amount) - Number(a.monthly_amount);
       }
       return a.name.localeCompare(b.name);
     });
-  }, [annualExpenses, sortBy]);
+  }, [filteredAnnualExpenses, sortBy]);
 
   // Sorted debts
   const sortedDebts = useMemo(() => {
@@ -184,6 +205,34 @@ export default function Cashflow() {
   const getLinkedParentName = (linkedParentId: string | null | undefined) => {
     if (!linkedParentId || !expenses) return null;
     return expenses.find((e) => e.id === linkedParentId)?.name ?? null;
+  };
+
+  // Get payment status for an expense based on payment day
+  const getPaymentStatus = (paymentDay: number | null | undefined) => {
+    if (!paymentDay) return null;
+    
+    const today = new Date();
+    const currentDay = today.getDate();
+    const daysUntilPayment = paymentDay >= currentDay 
+      ? paymentDay - currentDay 
+      : (new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() - currentDay) + paymentDay;
+    
+    // If payment day has passed this month, it's paid
+    if (paymentDay < currentDay) {
+      return { status: 'paid', label: 'Paid', daysUntil: 0 };
+    }
+    
+    // Due soon (within 3 days)
+    if (daysUntilPayment <= 3) {
+      return { status: 'due_soon', label: 'Due Soon', daysUntil: daysUntilPayment };
+    }
+    
+    // Upcoming (within 7 days)
+    if (daysUntilPayment <= 7) {
+      return { status: 'upcoming', label: `In ${daysUntilPayment} days`, daysUntil: daysUntilPayment };
+    }
+    
+    return null;
   };
 
   const handleDebtClick = (debtId: string) => {
@@ -241,6 +290,8 @@ export default function Cashflow() {
     // Linked expenses show as £0 since they're accounted for in parent
     const displayAmount = isLinked ? 0 : fullAmount * (isCouples ? 0.5 : 1);
     const subCount = getSubExpenseCount(expense.id);
+    const paymentStatus = getPaymentStatus(expense.payment_day);
+    const bankLabel = getBankAccountLabel(expense.bank_account);
     
     return (
       <SwipeableRow
@@ -264,21 +315,41 @@ export default function Cashflow() {
               {getInitialIcon(expense.name)}
             </div>
             <div>
-              <p className="text-sm flex items-center gap-1">
+              <p className="text-sm flex items-center gap-1 flex-wrap">
                 {expense.name}
                 {subCount > 0 && (
                   <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
                     {subCount} sub
                   </span>
                 )}
+                {paymentStatus && (
+                  <Badge 
+                    variant={paymentStatus.status === 'paid' ? 'default' : paymentStatus.status === 'due_soon' ? 'destructive' : 'secondary'}
+                    className={cn(
+                      "text-[9px] px-1.5 py-0 h-4",
+                      paymentStatus.status === 'paid' && "bg-savings/20 text-savings border-savings/30"
+                    )}
+                  >
+                    {paymentStatus.status === 'paid' && <Check className="h-2.5 w-2.5 mr-0.5" />}
+                    {paymentStatus.status === 'due_soon' && <Clock className="h-2.5 w-2.5 mr-0.5" />}
+                    {paymentStatus.label}
+                  </Badge>
+                )}
               </p>
-              {isLinked && linkedParentName ? (
-                <p className="text-xs text-muted-foreground italic">
-                  Included in {linkedParentName}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">{getCategoryLabel(expense.category)}</p>
-              )}
+              <div className="flex items-center gap-1.5">
+                {isLinked && linkedParentName ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    Included in {linkedParentName}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{getCategoryLabel(expense.category)}</p>
+                )}
+                {bankLabel && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-normal">
+                    {bankLabel}
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -485,18 +556,37 @@ export default function Cashflow() {
         )}
       </div>
 
-      {/* Outgoings Header with Sort */}
-      <div className="flex items-center justify-between mb-3">
+      {/* Outgoings Header with Sort and Filter */}
+      <div className="flex items-center justify-between mb-3 gap-2">
         <h2 className="text-lg font-semibold">Outgoings</h2>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setSortBy(sortBy === 'value' ? 'due' : 'value')}
-          className="text-xs"
-        >
-          <ArrowUpDown className="h-3 w-3 mr-1" />
-          {sortBy === 'value' ? 'By Value' : 'By Due'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select
+            value={bankAccountFilter || 'all'}
+            onValueChange={(v) => setBankAccountFilter(v === 'all' ? null : v)}
+          >
+            <SelectTrigger className="w-[130px] h-8 text-xs">
+              <Filter className="h-3 w-3 mr-1" />
+              <SelectValue placeholder="Filter" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All accounts</SelectItem>
+              {BANK_ACCOUNTS.map((acc) => (
+                <SelectItem key={acc.value} value={acc.value}>
+                  {acc.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setSortBy(sortBy === 'value' ? 'due' : 'value')}
+            className="text-xs h-8"
+          >
+            <ArrowUpDown className="h-3 w-3 mr-1" />
+            {sortBy === 'value' ? 'Value' : 'Due'}
+          </Button>
+        </div>
       </div>
 
       {/* Monthly Expenses Section */}

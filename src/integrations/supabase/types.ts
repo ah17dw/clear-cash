@@ -168,6 +168,7 @@ export type Database = {
       }
       expense_items: {
         Row: {
+          bank_account: string | null
           category: string | null
           couples_mode: boolean
           created_at: string
@@ -188,6 +189,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          bank_account?: string | null
           category?: string | null
           couples_mode?: boolean
           created_at?: string
@@ -208,6 +210,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          bank_account?: string | null
           category?: string | null
           couples_mode?: boolean
           created_at?: string
@@ -239,31 +242,37 @@ export type Database = {
       }
       income_sources: {
         Row: {
+          bank_account: string | null
           created_at: string
           end_date: string | null
           id: string
           monthly_amount: number
           name: string
+          payment_day: number | null
           start_date: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          bank_account?: string | null
           created_at?: string
           end_date?: string | null
           id?: string
           monthly_amount?: number
           name: string
+          payment_day?: number | null
           start_date?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          bank_account?: string | null
           created_at?: string
           end_date?: string | null
           id?: string
           monthly_amount?: number
           name?: string
+          payment_day?: number | null
           start_date?: string | null
           updated_at?: string
           user_id?: string

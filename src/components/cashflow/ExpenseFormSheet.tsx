@@ -27,6 +27,7 @@ import {
 import { useCreateExpenseItem, useUpdateExpenseItem, useExpenseItems } from '@/hooks/useFinanceData';
 import { useSubExpenses, useCreateSubExpense, useDeleteSubExpense } from '@/hooks/useSubExpenses';
 import { ExpenseItem, EXPENSE_CATEGORIES } from '@/types/finance';
+import { BANK_ACCOUNTS } from '@/types/bank-accounts';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/format';
@@ -70,6 +71,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense, readOnly = false
   const [isExtracting, setIsExtracting] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [linkedParentId, setLinkedParentId] = useState<string | null>(null);
+  const [bankAccount, setBankAccount] = useState<string | null>(null);
 
   // Get available parent expenses (exclude current expense and already-linked expenses)
   const availableParentExpenses = useMemo(() => {
@@ -120,6 +122,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense, readOnly = false
       setPaymentDay(expense.payment_day?.toString() ?? '');
       setIsTemporary(!!(expense.start_date || expense.end_date));
       setLinkedParentId(expense.linked_parent_id ?? null);
+      setBankAccount(expense.bank_account ?? null);
     } else {
       reset({
         name: '',
@@ -136,6 +139,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense, readOnly = false
       setNewSubName('');
       setNewSubAmount('');
       setLinkedParentId(null);
+      setBankAccount(null);
     }
   }, [expense, reset, open]);
 
@@ -231,6 +235,7 @@ export function ExpenseFormSheet({ open, onOpenChange, expense, readOnly = false
       start_date: isTemporary && startDate ? format(startDate, 'yyyy-MM-dd') : null,
       end_date: isTemporary && endDate ? format(endDate, 'yyyy-MM-dd') : null,
       linked_parent_id: linkedParentId,
+      bank_account: bankAccount,
     };
 
     if (isEditing) {
@@ -363,6 +368,34 @@ export function ExpenseFormSheet({ open, onOpenChange, expense, readOnly = false
                 </SelectContent>
               </Select>
             )}
+          </div>
+
+          {/* Bank Account Selection */}
+          <div className="space-y-2">
+            <Label>Bank Account / Card</Label>
+            {readOnly ? (
+              <p className="text-sm py-2 px-3 rounded-md bg-muted">
+                {BANK_ACCOUNTS.find(b => b.value === bankAccount)?.label ?? 'Not set'}
+              </p>
+            ) : (
+              <Select
+                value={bankAccount || 'none'}
+                onValueChange={(v) => setBankAccount(v === 'none' ? null : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select account" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not specified</SelectItem>
+                  {BANK_ACCOUNTS.map((acc) => (
+                    <SelectItem key={acc.value} value={acc.value}>
+                      {acc.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <p className="text-xs text-muted-foreground">Which account does this payment come from?</p>
           </div>
 
           {/* Payment Day */}
