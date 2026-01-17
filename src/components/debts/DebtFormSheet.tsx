@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { useCreateDebt, useUpdateDebt } from '@/hooks/useFinanceData';
 import { Debt, DEBT_TYPES } from '@/types/finance';
+import { BANK_ACCOUNTS } from '@/types/bank-accounts';
 
 const debtSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -40,6 +41,7 @@ const debtSchema = z.object({
   minimum_payment_is_percentage: z.boolean(),
   planned_payment: z.coerce.number().min(0).optional(),
   notes: z.string().optional(),
+  bank_account: z.string().optional(),
 });
 
 type DebtFormData = z.infer<typeof debtSchema>;
@@ -80,6 +82,7 @@ export function DebtFormSheet({ open, onOpenChange, debt }: DebtFormSheetProps) 
       minimum_payment_is_percentage: false,
       planned_payment: undefined,
       notes: '',
+      bank_account: '',
     },
   });
 
@@ -105,6 +108,7 @@ export function DebtFormSheet({ open, onOpenChange, debt }: DebtFormSheetProps) 
         minimum_payment_is_percentage: false,
         planned_payment: debt.planned_payment ? Number(debt.planned_payment) : undefined,
         notes: debt.notes ?? '',
+        bank_account: debt.bank_account ?? '',
       });
     } else {
       reset({
@@ -123,6 +127,7 @@ export function DebtFormSheet({ open, onOpenChange, debt }: DebtFormSheetProps) 
         minimum_payment_is_percentage: false,
         planned_payment: undefined,
         notes: '',
+        bank_account: '',
       });
     }
   }, [debt, reset, open]);
@@ -149,6 +154,7 @@ export function DebtFormSheet({ open, onOpenChange, debt }: DebtFormSheetProps) 
       payment_day: data.payment_day ?? null,
       planned_payment: data.planned_payment ?? null,
       notes: data.notes || null,
+      bank_account: data.bank_account || null,
     };
 
     if (isEditing) {
@@ -194,9 +200,28 @@ export function DebtFormSheet({ open, onOpenChange, debt }: DebtFormSheetProps) 
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="lender">Lender</Label>
-              <Input id="lender" {...register('lender')} placeholder="e.g. Barclays" />
+              <Label>Bank Account</Label>
+              <Select
+                value={watch('bank_account') || ''}
+                onValueChange={(v) => setValue('bank_account', v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BANK_ACCOUNTS.map((account) => (
+                    <SelectItem key={account.value} value={account.value}>
+                      {account.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="lender">Lender</Label>
+            <Input id="lender" {...register('lender')} placeholder="e.g. Barclays" />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
