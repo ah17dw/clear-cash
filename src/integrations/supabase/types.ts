@@ -65,6 +65,98 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_report_entries: {
+        Row: {
+          account_status: string | null
+          balance: number
+          created_at: string
+          credit_limit: number | null
+          id: string
+          last_verified_at: string
+          lender: string | null
+          matched_debt_id: string | null
+          monthly_payment: number | null
+          name: string
+          notes: string | null
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_status?: string | null
+          balance?: number
+          created_at?: string
+          credit_limit?: number | null
+          id?: string
+          last_verified_at?: string
+          lender?: string | null
+          matched_debt_id?: string | null
+          monthly_payment?: number | null
+          name: string
+          notes?: string | null
+          type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_status?: string | null
+          balance?: number
+          created_at?: string
+          credit_limit?: number | null
+          id?: string
+          last_verified_at?: string
+          lender?: string | null
+          matched_debt_id?: string | null
+          monthly_payment?: number | null
+          name?: string
+          notes?: string | null
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_report_entries_matched_debt_id_fkey"
+            columns: ["matched_debt_id"]
+            isOneToOne: false
+            referencedRelation: "debts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_score_history: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          recorded_at: string
+          score: number
+          score_band: string | null
+          source: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          recorded_at?: string
+          score: number
+          score_band?: string | null
+          source?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          recorded_at?: string
+          score?: number
+          score_band?: string | null
+          source?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       debt_payments: {
         Row: {
           amount: number
