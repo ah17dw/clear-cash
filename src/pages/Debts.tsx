@@ -1,21 +1,19 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CreditCard, ChevronRight, Percent, CalendarDays, ShieldCheck, Plus } from 'lucide-react';
+import { CreditCard, ChevronRight, Percent, CalendarDays } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AmountDisplay } from '@/components/ui/amount-display';
 import { Button } from '@/components/ui/button';
 import { SwipeableRow } from '@/components/ui/swipeable-row';
 import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
-import { useDebts, useExpenseItems, useIncomeSources, useDeleteDebt, useCreateDebt } from '@/hooks/useFinanceData';
+import { useDebts, useExpenseItems, useIncomeSources, useDeleteDebt, useCreateDebt, useUpdateDebt } from '@/hooks/useFinanceData';
 import { getDaysUntil } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { DebtFormSheet } from '@/components/debts/DebtFormSheet';
 import { getAdjustedBalance } from '@/lib/debt-utils';
 import { FinanceCalendar } from '@/components/finance/FinanceCalendar';
 import { UnifiedAddSheet } from '@/components/unified/UnifiedAddSheet';
-import { useCreditReport, CreditReportEntry } from '@/hooks/useCreditReport';
-import { CreditEntryFormSheet } from '@/components/credit/CreditEntryFormSheet';
-import { CreditComparisonCard } from '@/components/credit/CreditComparisonCard';
+import { CreditReportUpload } from '@/components/credit/CreditReportUpload';
 
 type SortOption = 'balance' | 'apr' | 'promo_ending';
 
@@ -48,11 +46,9 @@ export default function Debts() {
   const { data: income } = useIncomeSources();
   const deleteDebt = useDeleteDebt();
   const createDebt = useCreateDebt();
-  const { creditEntries, addEntry, updateEntry } = useCreditReport();
+  const updateDebt = useUpdateDebt();
   const [showForm, setShowForm] = useState(false);
   const [showUnifiedAdd, setShowUnifiedAdd] = useState(false);
-  const [showCreditEntryForm, setShowCreditEntryForm] = useState(false);
-  const [editingCreditEntry, setEditingCreditEntry] = useState<CreditReportEntry | null>(null);
   const [editingDebt, setEditingDebt] = useState<Debt | undefined>();
   const [showCalendar, setShowCalendar] = useState(false);
   const [showCreditReport, setShowCreditReport] = useState(false);
@@ -131,37 +127,28 @@ export default function Debts() {
     setShowForm(true);
   };
 
-  const handleAddCreditEntry = (data: any) => {
-    if (editingCreditEntry) {
-      updateEntry.mutate({ id: editingCreditEntry.id, data });
-    } else {
-      addEntry.mutate(data);
-    }
-    setEditingCreditEntry(null);
+  const handleUpdateDebtFromReport = (debtId: string, updates: any) => {
+    updateDebt.mutate({ id: debtId, ...updates });
   };
 
-  const handleAddToDebtsFromCredit = (entry: CreditReportEntry) => {
+  const handleAddDebtFromReport = (entry: { name: string; type: string; lender: string; balance: number; creditLimit?: number; monthlyPayment?: number; originalBorrowed?: number }) => {
     createDebt.mutate({
       name: entry.name,
-      type: entry.type === 'credit_card' ? 'credit_card' : 'loan',
+      type: entry.type === 'credit_card' ? 'credit_card' : entry.type === 'mortgage' ? 'mortgage' : 'loan',
       balance: entry.balance,
-      starting_balance: entry.balance,
+      starting_balance: entry.originalBorrowed || entry.balance,
       apr: 0,
-      minimum_payment: entry.monthly_payment || 0,
-      planned_payment: entry.monthly_payment,
+      minimum_payment: entry.monthlyPayment || 0,
+      planned_payment: entry.monthlyPayment || null,
       payment_day: null,
       is_promo_0: false,
       promo_start_date: null,
       promo_end_date: null,
       post_promo_apr: null,
       lender: entry.lender,
-      notes: `Added from Experian credit report`,
+      notes: 'Added from credit report',
       bank_account: null,
     });
-  };
-
-  const handleLinkDebt = (entryId: string, debtId: string) => {
-    updateEntry.mutate({ id: entryId, data: { matched_debt_id: debtId } });
   };
 
   return (
@@ -204,60 +191,23 @@ export default function Debts() {
         )}
       </div>
 
-      {/* Credit Report Toggle */}
-      <div className="finance-card mb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            <div>
-              <p className="text-sm font-medium">Credit Report Comparison</p>
-              <p className="text-xs text-muted-foreground">
-                {creditEntries?.length || 0} entries from Experian
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowCreditReport(!showCreditReport)}
-              className="text-xs"
-            >
-              {showCreditReport ? 'Hide' : 'Show'}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setEditingCreditEntry(null);
-                setShowCreditEntryForm(true);
-              }}
-              className="text-xs gap-1"
-            >
-              <Plus className="h-3 w-3" />
-              Add
-            </Button>
-          </div>
-        </div>
+      {/* Credit Report Upload */}
+      <div className="mb-4">
+        <CreditReportUpload
+          debts={(debts || []).map(d => ({
+            id: d.id,
+            name: d.name,
+            balance: Number(d.balance),
+            starting_balance: Number(d.starting_balance),
+            lender: d.lender,
+            type: d.type,
+            minimum_payment: Number(d.minimum_payment),
+            planned_payment: d.planned_payment ? Number(d.planned_payment) : null,
+          }))}
+          onUpdateDebt={handleUpdateDebtFromReport}
+          onAddDebt={handleAddDebtFromReport}
+        />
       </div>
-
-      {/* Credit Report Comparison */}
-      {showCreditReport && creditEntries && debts && (
-        <div className="mb-4">
-          <CreditComparisonCard
-            creditEntries={creditEntries}
-            debts={debts.map(d => ({
-              id: d.id,
-              name: d.name,
-              balance: Number(d.balance),
-              lender: d.lender,
-              type: d.type,
-            }))}
-            onLinkDebt={handleLinkDebt}
-            onAddToDebts={handleAddToDebtsFromCredit}
-          />
-        </div>
-      )}
 
       {/* Sort Options */}
       <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-hide pb-1">
@@ -471,13 +421,6 @@ export default function Debts() {
       )}
 
       <DebtFormSheet open={showForm} onOpenChange={setShowForm} debt={editingDebt} />
-
-      <CreditEntryFormSheet
-        open={showCreditEntryForm}
-        onOpenChange={setShowCreditEntryForm}
-        entry={editingCreditEntry}
-        onSubmit={handleAddCreditEntry}
-      />
 
       <DeleteConfirmDialog
         open={deleteConfirm.open}
