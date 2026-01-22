@@ -124,6 +124,42 @@ export type Database = {
           },
         ]
       }
+      credit_report_uploads: {
+        Row: {
+          created_at: string
+          discrepancies_found: number
+          entries_found: number
+          file_names: string[]
+          id: string
+          raw_results: Json | null
+          updates_applied: number
+          uploaded_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          discrepancies_found?: number
+          entries_found?: number
+          file_names: string[]
+          id?: string
+          raw_results?: Json | null
+          updates_applied?: number
+          uploaded_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          discrepancies_found?: number
+          entries_found?: number
+          file_names?: string[]
+          id?: string
+          raw_results?: Json | null
+          updates_applied?: number
+          uploaded_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       credit_score_history: {
         Row: {
           created_at: string

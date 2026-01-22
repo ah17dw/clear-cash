@@ -1,10 +1,12 @@
 import { useState, useRef } from 'react';
-import { Upload, FileText, Loader2, AlertTriangle, Check, X } from 'lucide-react';
+import { Upload, FileText, Loader2, AlertTriangle, Check, X, History, Clock, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { AmountDisplay } from '@/components/ui/amount-display';
-import { cn } from '@/lib/utils';
+import { useCreditReportUploads } from '@/hooks/useCreditReportUploads';
+import { CreditUploadHistorySheet } from './CreditUploadHistorySheet';
+import { Progress } from '@/components/ui/progress';
 
 interface CreditEntry {
   name: string;
@@ -175,59 +177,124 @@ function findDiscrepancies(entries: CreditEntry[], debts: Debt[]): Discrepancy[]
 
 export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditReportUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [discrepancies, setDiscrepancies] = useState<Discrepancy[]>([]);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [currentUploadId, setCurrentUploadId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const { 
+    createUpload, 
+    incrementUpdatesApplied,
+    daysUntilNextUpload, 
+    shouldUpload,
+    daysSinceLastUpload,
+    uploads
+  } = useCreditReportUploads();
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    
+    if (files.length > 5) {
+      toast.error('Maximum 5 files allowed at once');
+      return;
+    }
     
     const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
-    if (!validTypes.includes(file.type)) {
-      toast.error('Please upload a PNG, JPEG, or PDF file');
+    const invalidFiles = files.filter(f => !validTypes.includes(f.type));
+    if (invalidFiles.length > 0) {
+      toast.error('Please upload only PNG, JPEG, or PDF files');
       return;
     }
     
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('File size must be under 10MB');
+    const oversizedFiles = files.filter(f => f.size > 10 * 1024 * 1024);
+    if (oversizedFiles.length > 0) {
+      toast.error('Each file must be under 10MB');
       return;
     }
     
-    setSelectedFile(file);
+    setSelectedFiles(files);
     setIsUploading(true);
     setAnalysisResult(null);
     setDiscrepancies([]);
+    setUploadProgress(0);
     
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      const allEntries: CreditEntry[] = [];
+      let processedFiles = 0;
       
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-credit-report`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: formData,
+      // Process each file
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-credit-report`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: formData,
+          }
+        );
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || `Failed to analyze ${file.name}`);
         }
-      );
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to analyze report');
+        
+        const result: AnalysisResult = await response.json();
+        allEntries.push(...result.entries);
+        
+        processedFiles++;
+        setUploadProgress((processedFiles / files.length) * 100);
       }
       
-      const result: AnalysisResult = await response.json();
-      setAnalysisResult(result);
+      // Deduplicate entries by name
+      const uniqueEntries = allEntries.reduce((acc, entry) => {
+        const existing = acc.find(e => 
+          normalizeString(e.name) === normalizeString(entry.name) &&
+          normalizeString(e.lender) === normalizeString(entry.lender)
+        );
+        if (!existing) acc.push(entry);
+        return acc;
+      }, [] as CreditEntry[]);
+      
+      // Create combined result
+      const combinedResult: AnalysisResult = {
+        entries: uniqueEntries,
+        summary: {
+          totalCreditCards: uniqueEntries.filter(e => e.type === 'credit_card').length,
+          totalLoans: uniqueEntries.filter(e => e.type === 'loan').length,
+          totalMortgages: uniqueEntries.filter(e => e.type === 'mortgage').length,
+          totalDebt: uniqueEntries.reduce((sum, e) => sum + e.balance, 0),
+          totalCreditLimit: uniqueEntries.reduce((sum, e) => sum + (e.creditLimit || 0), 0),
+        },
+      };
+      
+      setAnalysisResult(combinedResult);
       
       // Find discrepancies
-      const foundDiscrepancies = findDiscrepancies(result.entries, debts);
+      const foundDiscrepancies = findDiscrepancies(combinedResult.entries, debts);
       setDiscrepancies(foundDiscrepancies);
       
       const withIssues = foundDiscrepancies.filter(d => d.differences.length > 0 || !d.matchedDebt);
+      
+      // Save to history
+      const { data: insertedData } = await createUpload.mutateAsync({
+        file_names: files.map(f => f.name),
+        entries_found: combinedResult.entries.length,
+        discrepancies_found: withIssues.length,
+        raw_results: combinedResult,
+      }).then(() => {
+        // We need to fetch the latest upload to get its ID
+        return { data: null };
+      });
+      
       if (withIssues.length > 0) {
         toast.warning(`Found ${withIssues.length} item(s) needing attention`);
       } else {
@@ -237,9 +304,14 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
     } catch (error) {
       console.error('Error analyzing report:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to analyze report');
-      setSelectedFile(null);
+      setSelectedFiles([]);
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -267,6 +339,11 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
     }
     
     onUpdateDebt(discrepancy.matchedDebt.id, updates);
+    
+    // Increment updates applied if we have a current upload
+    if (currentUploadId) {
+      incrementUpdatesApplied.mutate(currentUploadId);
+    }
     
     // Remove from discrepancies
     setDiscrepancies(prev => 
@@ -307,6 +384,41 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
 
   return (
     <div className="space-y-4">
+      {/* Upload Reminder */}
+      {shouldUpload && (
+        <Card className="p-3 border-primary/50 bg-primary/5">
+          <div className="flex items-center gap-3">
+            <Clock className="h-5 w-5 text-primary" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">Time to upload your credit report</p>
+              <p className="text-xs text-muted-foreground">
+                {daysSinceLastUpload === null 
+                  ? "You haven't uploaded a report yet"
+                  : `Last uploaded ${daysSinceLastUpload} days ago`
+                }
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+      
+      {/* Countdown */}
+      {!shouldUpload && daysUntilNextUpload !== null && (
+        <Card className="p-3">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-savings/10 flex items-center justify-center">
+              <Check className="h-5 w-5 text-savings" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium">Report up to date</p>
+              <p className="text-xs text-muted-foreground">
+                Next upload recommended in {daysUntilNextUpload} days
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+      
       {/* Upload Button */}
       <Card className="p-4">
         <input
@@ -314,6 +426,7 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
           ref={fileInputRef}
           onChange={handleFileSelect}
           accept="image/png,image/jpeg,image/jpg,application/pdf"
+          multiple
           className="hidden"
         />
         
@@ -325,34 +438,54 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
             <div>
               <p className="font-medium">Upload Credit Report</p>
               <p className="text-xs text-muted-foreground">
-                PNG, JPEG, or PDF from TransUnion/Experian
+                Up to 5 PNG, JPEG, or PDF files
               </p>
             </div>
           </div>
           
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-            className="gap-2"
-          >
-            {isUploading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <Upload className="h-4 w-4" />
-                Upload
-              </>
+          <div className="flex items-center gap-2">
+            {uploads && uploads.length > 0 && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowHistory(true)}
+              >
+                <History className="h-4 w-4" />
+              </Button>
             )}
-          </Button>
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="gap-2"
+            >
+              {isUploading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4" />
+                  Upload
+                </>
+              )}
+            </Button>
+          </div>
         </div>
         
-        {selectedFile && !isUploading && (
-          <p className="text-xs text-muted-foreground mt-2">
-            Analyzed: {selectedFile.name}
-          </p>
+        {isUploading && uploadProgress > 0 && (
+          <div className="mt-3">
+            <Progress value={uploadProgress} className="h-2" />
+            <p className="text-xs text-muted-foreground mt-1">
+              Processing files... {Math.round(uploadProgress)}%
+            </p>
+          </div>
+        )}
+        
+        {selectedFiles.length > 0 && !isUploading && (
+          <div className="mt-2 text-xs text-muted-foreground">
+            Analyzed: {selectedFiles.map(f => f.name).join(', ')}
+          </div>
         )}
       </Card>
       
@@ -487,7 +620,7 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
                   onClick={() => handleAddAsNew(discrepancy.reportEntry)}
                   className="flex-1 gap-1"
                 >
-                  <Check className="h-3 w-3" />
+                  <Plus className="h-3 w-3" />
                   Add to Debts
                 </Button>
                 <Button
@@ -526,6 +659,12 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
           </Card>
         </div>
       )}
+      
+      {/* History Sheet */}
+      <CreditUploadHistorySheet 
+        open={showHistory} 
+        onOpenChange={setShowHistory} 
+      />
     </div>
   );
 }
