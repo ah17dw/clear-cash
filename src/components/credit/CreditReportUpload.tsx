@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Upload, FileText, Loader2, AlertTriangle, Check, X, History, Clock, Plus } from 'lucide-react';
+import { Upload, FileText, Loader2, AlertTriangle, Check, X, History, Clock, Plus, Link2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
@@ -7,6 +7,14 @@ import { AmountDisplay } from '@/components/ui/amount-display';
 import { useCreditReportUploads } from '@/hooks/useCreditReportUploads';
 import { CreditUploadHistorySheet } from './CreditUploadHistorySheet';
 import { Progress } from '@/components/ui/progress';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface CreditEntry {
   name: string;
@@ -51,6 +59,9 @@ interface Discrepancy {
     trackedValue: string | number | null;
   }[];
   matchScore: number;
+  status: 'pending' | 'linked' | 'dismissed' | 'added';
+  manuallyLinkedDebtId?: string;
+  selectedFields?: string[];
 }
 
 interface CreditReportUploadProps {
@@ -169,10 +180,55 @@ function findDiscrepancies(entries: CreditEntry[], debts: Debt[]): Discrepancy[]
       matchedDebt: bestMatch,
       differences,
       matchScore: bestScore,
+      status: 'pending',
+      selectedFields: differences.map(d => d.field), // Default select all
     });
   }
   
   return discrepancies;
+}
+
+function calculateDifferencesForDebt(entry: CreditEntry, debt: Debt): Discrepancy['differences'] {
+  const differences: Discrepancy['differences'] = [];
+  
+  // Check balance difference
+  if (Math.abs(entry.balance - debt.balance) > 1) {
+    differences.push({
+      field: 'Balance',
+      reportValue: entry.balance,
+      trackedValue: debt.balance,
+    });
+  }
+  
+  // Check lender
+  if (entry.lender && (!debt.lender || normalizeString(entry.lender) !== normalizeString(debt.lender))) {
+    differences.push({
+      field: 'Lender',
+      reportValue: entry.lender,
+      trackedValue: debt.lender,
+    });
+  }
+  
+  // Check starting balance (original borrowed) for loans
+  if (entry.originalBorrowed && Math.abs(entry.originalBorrowed - debt.starting_balance) > 1) {
+    differences.push({
+      field: 'Original Amount',
+      reportValue: entry.originalBorrowed,
+      trackedValue: debt.starting_balance,
+    });
+  }
+  
+  // Check monthly payment
+  const trackedPayment = debt.planned_payment || debt.minimum_payment;
+  if (entry.monthlyPayment && Math.abs(entry.monthlyPayment - trackedPayment) > 1) {
+    differences.push({
+      field: 'Monthly Payment',
+      reportValue: entry.monthlyPayment,
+      trackedValue: trackedPayment,
+    });
+  }
+  
+  return differences;
 }
 
 export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditReportUploadProps) {
@@ -183,6 +239,7 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [currentUploadId, setCurrentUploadId] = useState<string | null>(null);
+  const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { 
@@ -193,6 +250,18 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
     daysSinceLastUpload,
     uploads
   } = useCreditReportUploads();
+
+  const toggleExpanded = (idx: number) => {
+    setExpandedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+      } else {
+        next.add(idx);
+      }
+      return next;
+    });
+  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -221,6 +290,7 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
     setAnalysisResult(null);
     setDiscrepancies([]);
     setUploadProgress(0);
+    setExpandedItems(new Set());
     
     try {
       const allEntries: CreditEntry[] = [];
@@ -285,14 +355,11 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
       const withIssues = foundDiscrepancies.filter(d => d.differences.length > 0 || !d.matchedDebt);
       
       // Save to history
-      const { data: insertedData } = await createUpload.mutateAsync({
+      await createUpload.mutateAsync({
         file_names: files.map(f => f.name),
         entries_found: combinedResult.entries.length,
         discrepancies_found: withIssues.length,
         raw_results: combinedResult,
-      }).then(() => {
-        // We need to fetch the latest upload to get its ID
-        return { data: null };
       });
       
       if (withIssues.length > 0) {
@@ -315,12 +382,52 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
     }
   };
 
-  const handleUpdateDebt = (discrepancy: Discrepancy) => {
-    if (!discrepancy.matchedDebt) return;
+  const handleLinkToDebt = (discrepancyIdx: number, debtId: string) => {
+    const debt = debts.find(d => d.id === debtId);
+    if (!debt) return;
+    
+    setDiscrepancies(prev => prev.map((d, idx) => {
+      if (idx !== discrepancyIdx) return d;
+      
+      const newDifferences = calculateDifferencesForDebt(d.reportEntry, debt);
+      
+      return {
+        ...d,
+        matchedDebt: debt,
+        manuallyLinkedDebtId: debtId,
+        differences: newDifferences,
+        selectedFields: newDifferences.map(diff => diff.field),
+        status: 'linked' as const,
+      };
+    }));
+    
+    // Auto-expand to show field selection
+    setExpandedItems(prev => new Set(prev).add(discrepancyIdx));
+  };
+
+  const toggleFieldSelection = (discrepancyIdx: number, field: string) => {
+    setDiscrepancies(prev => prev.map((d, idx) => {
+      if (idx !== discrepancyIdx) return d;
+      
+      const selectedFields = d.selectedFields || [];
+      const newSelectedFields = selectedFields.includes(field)
+        ? selectedFields.filter(f => f !== field)
+        : [...selectedFields, field];
+      
+      return { ...d, selectedFields: newSelectedFields };
+    }));
+  };
+
+  const handleApplySelectedUpdates = (discrepancy: Discrepancy, discrepancyIdx: number) => {
+    const targetDebt = discrepancy.matchedDebt;
+    if (!targetDebt) return;
     
     const updates: Partial<Debt> = {};
+    const selectedFields = discrepancy.selectedFields || [];
     
     for (const diff of discrepancy.differences) {
+      if (!selectedFields.includes(diff.field)) continue;
+      
       switch (diff.field) {
         case 'Balance':
           updates.balance = diff.reportValue as number;
@@ -338,49 +445,250 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
       }
     }
     
-    onUpdateDebt(discrepancy.matchedDebt.id, updates);
+    if (Object.keys(updates).length === 0) {
+      toast.info('No fields selected to update');
+      return;
+    }
+    
+    onUpdateDebt(targetDebt.id, updates);
     
     // Increment updates applied if we have a current upload
     if (currentUploadId) {
       incrementUpdatesApplied.mutate(currentUploadId);
     }
     
-    // Remove from discrepancies
-    setDiscrepancies(prev => 
-      prev.map(d => 
-        d.matchedDebt?.id === discrepancy.matchedDebt?.id 
-          ? { ...d, differences: [] }
-          : d
-      )
-    );
+    // Mark as completed
+    setDiscrepancies(prev => prev.map((d, idx) => 
+      idx === discrepancyIdx 
+        ? { ...d, differences: [], status: 'linked' as const }
+        : d
+    ));
     
-    toast.success(`Updated ${discrepancy.matchedDebt.name}`);
+    toast.success(`Updated ${targetDebt.name}`);
   };
 
-  const handleAddAsNew = (entry: CreditEntry) => {
+  const handleAddAsNew = (entry: CreditEntry, discrepancyIdx: number) => {
     onAddDebt(entry);
     
-    // Remove from unmatched
-    setDiscrepancies(prev => 
-      prev.filter(d => d.reportEntry !== entry)
-    );
+    // Mark as added
+    setDiscrepancies(prev => prev.map((d, idx) => 
+      idx === discrepancyIdx
+        ? { ...d, status: 'added' as const }
+        : d
+    ));
     
     toast.success(`Added ${entry.name} as new debt`);
   };
 
-  const handleDismiss = (discrepancy: Discrepancy) => {
-    setDiscrepancies(prev => 
-      prev.map(d => 
-        d === discrepancy 
-          ? { ...d, differences: [] }
-          : d
-      )
-    );
+  const handleDismiss = (discrepancyIdx: number) => {
+    setDiscrepancies(prev => prev.map((d, idx) => 
+      idx === discrepancyIdx 
+        ? { ...d, status: 'dismissed' as const, differences: [] }
+        : d
+    ));
+    toast.info('Item dismissed');
   };
 
-  const unmatchedEntries = discrepancies.filter(d => !d.matchedDebt);
-  const entriesWithDifferences = discrepancies.filter(d => d.matchedDebt && d.differences.length > 0);
-  const matchedEntries = discrepancies.filter(d => d.matchedDebt && d.differences.length === 0);
+  // Filter by status
+  const pendingItems = discrepancies.filter(d => d.status === 'pending');
+  const unmatchedPending = pendingItems.filter(d => !d.matchedDebt);
+  const matchedWithDiffsPending = pendingItems.filter(d => d.matchedDebt && d.differences.length > 0);
+  const matchedNoDiffsPending = pendingItems.filter(d => d.matchedDebt && d.differences.length === 0);
+  
+  const linkedItems = discrepancies.filter(d => d.status === 'linked' && d.differences.length > 0);
+  const completedItems = discrepancies.filter(d => 
+    d.status === 'added' || 
+    d.status === 'dismissed' || 
+    (d.status === 'linked' && d.differences.length === 0)
+  );
+
+  // Get available debts for linking (not already matched)
+  const getAvailableDebtsForLinking = (currentDiscrepancyIdx: number) => {
+    const usedDebtIds = new Set(
+      discrepancies
+        .filter((d, idx) => idx !== currentDiscrepancyIdx && d.matchedDebt)
+        .map(d => d.matchedDebt!.id)
+    );
+    return debts.filter(d => !usedDebtIds.has(d.id));
+  };
+
+  const renderEntryCard = (discrepancy: Discrepancy, idx: number, variant: 'unmatched' | 'needs-attention' | 'matched' | 'linking') => {
+    const isExpanded = expandedItems.has(idx);
+    const availableDebts = getAvailableDebtsForLinking(idx);
+    
+    const cardStyles = {
+      'unmatched': 'border-warning/50 bg-warning/5',
+      'needs-attention': 'border-destructive/50 bg-destructive/5',
+      'matched': 'border-savings/50 bg-savings/5',
+      'linking': 'border-primary/50 bg-primary/5',
+    };
+    
+    return (
+      <Card key={idx} className={`p-4 ${cardStyles[variant]}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <p className="font-medium">{discrepancy.reportEntry.name}</p>
+              {discrepancy.differences.length > 0 && variant !== 'linking' && (
+                <span className="text-[10px] bg-destructive/20 text-destructive px-1.5 py-0.5 rounded-full">
+                  {discrepancy.differences.length} difference{discrepancy.differences.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">{discrepancy.reportEntry.lender}</p>
+            
+            {discrepancy.matchedDebt && (
+              <p className="text-xs text-muted-foreground mt-1">
+                <span className="text-primary">→ Linked to:</span> {discrepancy.matchedDebt.name}
+              </p>
+            )}
+            
+            <div className="flex items-center gap-4 mt-2">
+              <div>
+                <p className="text-xs text-muted-foreground">Balance</p>
+                <AmountDisplay amount={discrepancy.reportEntry.balance} size="sm" />
+              </div>
+              {discrepancy.reportEntry.creditLimit && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Limit</p>
+                  <AmountDisplay amount={discrepancy.reportEntry.creditLimit} size="sm" />
+                </div>
+              )}
+              {discrepancy.reportEntry.monthlyPayment && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Monthly</p>
+                  <AmountDisplay amount={discrepancy.reportEntry.monthlyPayment} size="sm" />
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {(discrepancy.differences.length > 0 || variant === 'unmatched') && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => toggleExpanded(idx)}
+            >
+              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+          )}
+        </div>
+        
+        {/* Expanded section */}
+        {isExpanded && (
+          <div className="mt-4 pt-4 border-t space-y-4">
+            {/* Link to different debt option */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                {discrepancy.matchedDebt ? 'Link to different debt:' : 'Link to existing debt:'}
+              </p>
+              <Select 
+                value={discrepancy.manuallyLinkedDebtId || discrepancy.matchedDebt?.id || ''} 
+                onValueChange={(value) => handleLinkToDebt(idx, value)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a debt to link..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableDebts.map(debt => (
+                    <SelectItem key={debt.id} value={debt.id}>
+                      {debt.name} - £{debt.balance.toLocaleString()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Field selection - only show when there are differences */}
+            {discrepancy.matchedDebt && discrepancy.differences.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Select fields to update:</p>
+                <div className="space-y-2">
+                  {discrepancy.differences.map((diff, diffIdx) => (
+                    <div 
+                      key={diffIdx} 
+                      className="flex items-center gap-3 bg-background rounded p-2 cursor-pointer"
+                      onClick={() => toggleFieldSelection(idx, diff.field)}
+                    >
+                      <Checkbox 
+                        checked={(discrepancy.selectedFields || []).includes(diff.field)}
+                        onCheckedChange={() => toggleFieldSelection(idx, diff.field)}
+                      />
+                      <span className="text-sm flex-1">{diff.field}</span>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-destructive line-through">
+                          {typeof diff.trackedValue === 'number' ? `£${diff.trackedValue.toLocaleString()}` : diff.trackedValue || 'Not set'}
+                        </span>
+                        <span>→</span>
+                        <span className="text-savings font-medium">
+                          {typeof diff.reportValue === 'number' ? `£${diff.reportValue.toLocaleString()}` : diff.reportValue}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* No differences message for linked items */}
+            {discrepancy.matchedDebt && discrepancy.differences.length === 0 && (
+              <p className="text-sm text-savings flex items-center gap-2">
+                <Check className="h-4 w-4" />
+                All fields match - no updates needed
+              </p>
+            )}
+          </div>
+        )}
+        
+        {/* Action buttons */}
+        <div className="flex gap-2 mt-3">
+          {discrepancy.matchedDebt && discrepancy.differences.length > 0 && (
+            <Button
+              size="sm"
+              onClick={() => handleApplySelectedUpdates(discrepancy, idx)}
+              className="flex-1 gap-1"
+              disabled={(discrepancy.selectedFields || []).length === 0}
+            >
+              <Check className="h-3 w-3" />
+              Update Selected ({(discrepancy.selectedFields || []).length})
+            </Button>
+          )}
+          
+          {!discrepancy.matchedDebt && (
+            <Button
+              size="sm"
+              onClick={() => handleAddAsNew(discrepancy.reportEntry, idx)}
+              className="flex-1 gap-1"
+            >
+              <Plus className="h-3 w-3" />
+              Add as New Debt
+            </Button>
+          )}
+          
+          {!discrepancy.matchedDebt && availableDebts.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => toggleExpanded(idx)}
+              className="gap-1"
+            >
+              <Link2 className="h-3 w-3" />
+              Link
+            </Button>
+          )}
+          
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleDismiss(idx)}
+            title="Dismiss - this entry is incorrect or not applicable"
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -516,143 +824,106 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
         </Card>
       )}
       
-      {/* Discrepancies - needs attention */}
-      {entriesWithDifferences.length > 0 && (
+      {/* Items requiring linking (user chose to link) */}
+      {linkedItems.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium flex items-center gap-2">
+            <Link2 className="h-4 w-4 text-primary" />
+            Ready to Update ({linkedItems.length})
+          </p>
+          {linkedItems.map((d, idx) => {
+            const originalIdx = discrepancies.indexOf(d);
+            return renderEntryCard(d, originalIdx, 'linking');
+          })}
+        </div>
+      )}
+      
+      {/* Needs Attention - matched but has differences */}
+      {matchedWithDiffsPending.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-destructive" />
-            Needs Attention ({entriesWithDifferences.length})
+            Needs Attention ({matchedWithDiffsPending.length})
           </p>
-          
-          {entriesWithDifferences.map((discrepancy, idx) => (
-            <Card key={idx} className="p-4 border-destructive/50 bg-destructive/5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{discrepancy.reportEntry.name}</p>
-                    <span className="text-[10px] bg-destructive/20 text-destructive px-1.5 py-0.5 rounded-full">
-                      {discrepancy.differences.length} difference{discrepancy.differences.length > 1 ? 's' : ''}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Matched to: {discrepancy.matchedDebt?.name}
-                  </p>
-                  
-                  <div className="mt-3 space-y-2">
-                    {discrepancy.differences.map((diff, diffIdx) => (
-                      <div key={diffIdx} className="flex items-center justify-between text-sm bg-background rounded p-2">
-                        <span className="text-muted-foreground">{diff.field}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-destructive line-through">
-                            {typeof diff.trackedValue === 'number' ? `£${diff.trackedValue.toLocaleString()}` : diff.trackedValue || 'Not set'}
-                          </span>
-                          <span>→</span>
-                          <span className="text-savings font-medium">
-                            {typeof diff.reportValue === 'number' ? `£${diff.reportValue.toLocaleString()}` : diff.reportValue}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex gap-2 mt-3">
-                <Button
-                  size="sm"
-                  onClick={() => handleUpdateDebt(discrepancy)}
-                  className="flex-1 gap-1"
-                >
-                  <Check className="h-3 w-3" />
-                  Update All
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleDismiss(discrepancy)}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            </Card>
-          ))}
+          {matchedWithDiffsPending.map((d, idx) => {
+            const originalIdx = discrepancies.indexOf(d);
+            return renderEntryCard(d, originalIdx, 'needs-attention');
+          })}
         </div>
       )}
       
-      {/* Unmatched entries */}
-      {unmatchedEntries.length > 0 && (
+      {/* Unmatched - not found in debts */}
+      {unmatchedPending.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-warning" />
-            Not In Your Debts ({unmatchedEntries.length})
+            Not In Your Debts ({unmatchedPending.length})
           </p>
-          
-          {unmatchedEntries.map((discrepancy, idx) => (
-            <Card key={idx} className="p-4 border-warning/50 bg-warning/5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <p className="font-medium">{discrepancy.reportEntry.name}</p>
-                  <p className="text-xs text-muted-foreground">{discrepancy.reportEntry.lender}</p>
-                  <div className="flex items-center gap-4 mt-2">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Balance</p>
-                      <AmountDisplay amount={discrepancy.reportEntry.balance} size="sm" />
-                    </div>
-                    {discrepancy.reportEntry.creditLimit && (
-                      <div>
-                        <p className="text-xs text-muted-foreground">Limit</p>
-                        <AmountDisplay amount={discrepancy.reportEntry.creditLimit} size="sm" />
-                      </div>
-                    )}
-                    {discrepancy.reportEntry.monthlyPayment && (
-                      <div>
-                        <p className="text-xs text-muted-foreground">Monthly</p>
-                        <AmountDisplay amount={discrepancy.reportEntry.monthlyPayment} size="sm" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex gap-2 mt-3">
-                <Button
-                  size="sm"
-                  onClick={() => handleAddAsNew(discrepancy.reportEntry)}
-                  className="flex-1 gap-1"
-                >
-                  <Plus className="h-3 w-3" />
-                  Add to Debts
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setDiscrepancies(prev => prev.filter(d => d !== discrepancy))}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            </Card>
-          ))}
+          {unmatchedPending.map((d, idx) => {
+            const originalIdx = discrepancies.indexOf(d);
+            return renderEntryCard(d, originalIdx, 'unmatched');
+          })}
         </div>
       )}
       
-      {/* Matched entries */}
-      {matchedEntries.length > 0 && (
+      {/* Matched - no issues */}
+      {matchedNoDiffsPending.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium flex items-center gap-2">
             <Check className="h-4 w-4 text-savings" />
-            Matched ({matchedEntries.length})
+            Matched ({matchedNoDiffsPending.length})
           </p>
-          
           <Card className="p-3">
             <div className="space-y-2">
-              {matchedEntries.map((discrepancy, idx) => (
-                <div key={idx} className="flex items-center justify-between py-1 text-sm">
-                  <span>{discrepancy.reportEntry.name}</span>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <AmountDisplay amount={discrepancy.reportEntry.balance} size="sm" />
-                    <Check className="h-3 w-3 text-savings" />
+              {matchedNoDiffsPending.map((d, idx) => {
+                const originalIdx = discrepancies.indexOf(d);
+                return (
+                  <div key={idx} className="flex items-center justify-between py-1 text-sm">
+                    <div className="flex-1">
+                      <span>{d.reportEntry.name}</span>
+                      <span className="text-xs text-muted-foreground ml-2">→ {d.matchedDebt?.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <AmountDisplay amount={d.reportEntry.balance} size="sm" />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => toggleExpanded(originalIdx)}
+                        className="h-6 w-6 p-0"
+                      >
+                        <Link2 className="h-3 w-3" />
+                      </Button>
+                      <Check className="h-3 w-3 text-savings" />
+                    </div>
+                    {expandedItems.has(originalIdx) && (
+                      <div className="w-full mt-2">
+                        {renderEntryCard(d, originalIdx, 'matched')}
+                      </div>
+                    )}
                   </div>
+                );
+              })}
+            </div>
+          </Card>
+        </div>
+      )}
+      
+      {/* Completed/Dismissed items */}
+      {completedItems.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+            Processed ({completedItems.length})
+          </p>
+          <Card className="p-3 opacity-60">
+            <div className="space-y-1">
+              {completedItems.map((d, idx) => (
+                <div key={idx} className="flex items-center justify-between py-1 text-sm text-muted-foreground">
+                  <span>{d.reportEntry.name}</span>
+                  <span className="text-xs">
+                    {d.status === 'added' && '✓ Added'}
+                    {d.status === 'dismissed' && '✕ Dismissed'}
+                    {d.status === 'linked' && d.differences.length === 0 && '✓ Updated'}
+                  </span>
                 </div>
               ))}
             </div>
