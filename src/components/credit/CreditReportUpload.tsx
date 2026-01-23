@@ -574,7 +574,38 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
           )}
         </div>
         
-        {/* Expanded section */}
+        {/* Field selection - always show when there are differences (not hidden behind expand) */}
+        {discrepancy.matchedDebt && discrepancy.differences.length > 0 && (
+          <div className="mt-4 pt-3 border-t space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Select fields to update:</p>
+            <div className="space-y-2">
+              {discrepancy.differences.map((diff, diffIdx) => (
+                <div 
+                  key={diffIdx} 
+                  className="flex items-center gap-3 bg-background rounded p-2 cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => toggleFieldSelection(idx, diff.field)}
+                >
+                  <Checkbox 
+                    checked={(discrepancy.selectedFields || []).includes(diff.field)}
+                    onCheckedChange={() => toggleFieldSelection(idx, diff.field)}
+                  />
+                  <span className="text-sm flex-1 font-medium">{diff.field}</span>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-destructive line-through">
+                      {typeof diff.trackedValue === 'number' ? `£${diff.trackedValue.toLocaleString()}` : diff.trackedValue || 'Not set'}
+                    </span>
+                    <span className="text-muted-foreground">→</span>
+                    <span className="text-savings font-medium">
+                      {typeof diff.reportValue === 'number' ? `£${diff.reportValue.toLocaleString()}` : diff.reportValue}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Expanded section - for linking to different debt */}
         {isExpanded && (
           <div className="mt-4 pt-4 border-t space-y-4">
             {/* Link to different debt option */}
@@ -598,37 +629,6 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
                 </SelectContent>
               </Select>
             </div>
-            
-            {/* Field selection - only show when there are differences */}
-            {discrepancy.matchedDebt && discrepancy.differences.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Select fields to update:</p>
-                <div className="space-y-2">
-                  {discrepancy.differences.map((diff, diffIdx) => (
-                    <div 
-                      key={diffIdx} 
-                      className="flex items-center gap-3 bg-background rounded p-2 cursor-pointer"
-                      onClick={() => toggleFieldSelection(idx, diff.field)}
-                    >
-                      <Checkbox 
-                        checked={(discrepancy.selectedFields || []).includes(diff.field)}
-                        onCheckedChange={() => toggleFieldSelection(idx, diff.field)}
-                      />
-                      <span className="text-sm flex-1">{diff.field}</span>
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-destructive line-through">
-                          {typeof diff.trackedValue === 'number' ? `£${diff.trackedValue.toLocaleString()}` : diff.trackedValue || 'Not set'}
-                        </span>
-                        <span>→</span>
-                        <span className="text-savings font-medium">
-                          {typeof diff.reportValue === 'number' ? `£${diff.reportValue.toLocaleString()}` : diff.reportValue}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
             
             {/* No differences message for linked items */}
             {discrepancy.matchedDebt && discrepancy.differences.length === 0 && (

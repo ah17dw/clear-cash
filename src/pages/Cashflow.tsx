@@ -713,6 +713,8 @@ export default function Cashflow() {
           <div className="space-y-2">
             {sortedDebts.map((debt) => {
               const payment = Number(debt.planned_payment) || Number(debt.minimum_payment);
+              const paymentStatus = getPaymentStatus(debt.payment_day);
+              const bankLabel = getBankAccountLabel(debt.bank_account);
               return (
                 <div
                   key={debt.id}
@@ -724,14 +726,34 @@ export default function Cashflow() {
                       {getInitialIcon(debt.name)}
                     </div>
                     <div>
-                      <p className="text-sm flex items-center gap-1">
+                      <p className="text-sm flex items-center gap-1 flex-wrap">
                         {debt.name}
+                        {paymentStatus && (
+                          <Badge 
+                            variant={paymentStatus.status === 'paid' ? 'default' : paymentStatus.status === 'due_soon' ? 'destructive' : 'secondary'}
+                            className={cn(
+                              "text-[9px] px-1.5 py-0 h-4",
+                              paymentStatus.status === 'paid' && "bg-savings/20 text-savings border-savings/30"
+                            )}
+                          >
+                            {paymentStatus.status === 'paid' && <Check className="h-2.5 w-2.5 mr-0.5" />}
+                            {paymentStatus.status === 'due_soon' && <Clock className="h-2.5 w-2.5 mr-0.5" />}
+                            {paymentStatus.label}
+                          </Badge>
+                        )}
                         <ChevronRight className="h-3 w-3 text-muted-foreground" />
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {debt.planned_payment ? 'Planned' : 'Minimum'}
-                        {debt.payment_day && ` · Day ${debt.payment_day}`}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs text-muted-foreground">
+                          {debt.planned_payment ? 'Planned' : 'Minimum'}
+                          {debt.payment_day && ` · Day ${debt.payment_day}`}
+                        </p>
+                        {bankLabel && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-normal">
+                            {bankLabel}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
