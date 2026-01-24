@@ -83,6 +83,16 @@ export function MonthlyPaymentSummaryCard() {
     };
   }, [expenses, debts, renewals, currentDay]);
 
+  const getOrdinalSuffix = (day: number) => {
+    if (day > 3 && day < 21) return 'th';
+    switch (day % 10) {
+      case 1: return 'st';
+      case 2: return 'nd';
+      case 3: return 'rd';
+      default: return 'th';
+    }
+  };
+
   // Get date range for upcoming payments
   const upcomingDateRange = useMemo(() => {
     if (upcomingItems.length === 0) return null;
@@ -94,16 +104,6 @@ export function MonthlyPaymentSummaryCard() {
     }
     return `${firstDay}${getOrdinalSuffix(firstDay)} - ${lastDay}${getOrdinalSuffix(lastDay)}`;
   }, [upcomingItems]);
-
-  const getOrdinalSuffix = (day: number) => {
-    if (day > 3 && day < 21) return 'th';
-    switch (day % 10) {
-      case 1: return 'st';
-      case 2: return 'nd';
-      case 3: return 'rd';
-      default: return 'th';
-    }
-  };
 
   // Truncate list to first 4 items with "+X more" indicator
   const truncateList = (items: PaymentItem[], max: number = 4) => {
