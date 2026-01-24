@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { TrendingUp, Clock, PiggyBank, Loader2 } from 'lucide-react';
+import { TrendingUp, Clock, PiggyBank, Loader2, Wallet, AlertCircle } from 'lucide-react';
 import { SummaryCard } from './SummaryCard';
-import { useExpenseItems, useSavingsAccounts, useDebts } from '@/hooks/useFinanceData';
+import { useExpenseItems, useSavingsAccounts, useDebts, useIncomeSources } from '@/hooks/useFinanceData';
 import { useRenewals } from '@/hooks/useRenewals';
 import { supabase } from '@/integrations/supabase/client';
 import { FinanceSummary } from '@/types/finance';
@@ -20,26 +20,55 @@ export function FinancialInsightsCard({ summary }: FinancialInsightsCardProps) {
   const { data: savings } = useSavingsAccounts();
   const { data: debts } = useDebts();
   const { data: renewals } = useRenewals();
+  const { data: incomeSources } = useIncomeSources();
   
   const [spendingCategories, setSpendingCategories] = useState<SpendingCategory[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Calculate savings runway using net position (savings - debts)
-  const savingsRunway = useMemo(() => {
-    const netPosition = summary.netPosition; // savings minus debts
-    const monthlyDeficit = summary.monthlySurplus < 0 ? Math.abs(summary.monthlySurplus) : 0;
+  // Calculate permanent vs temporary income
+  const { permanentIncome, temporaryIncome, totalIncome } = useMemo(() => {
+    let permanent = 0;
+    let temporary = 0;
     
-    if (monthlyDeficit === 0) {
-      return { months: null, netPosition }; // No deficit, funds growing
+    incomeSources?.forEach(source => {
+      const amount = Number(source.monthly_amount);
+      if (source.end_date) {
+        temporary += amount;
+      } else {
+        permanent += amount;
+      }
+    });
+    
+    return { permanentIncome: permanent, temporaryIncome: temporary, totalIncome: permanent + temporary };
+  }, [incomeSources]);
+
+  // Calculate funds runway incorporating income
+  // Net position (savings - debts) + monthly income vs monthly outgoings
+  const fundsRunway = useMemo(() => {
+    const netPosition = summary.totalSavings - summary.totalDebts;
+    const monthlyOutgoings = summary.monthlyOutgoings;
+    const monthlyNet = totalIncome - monthlyOutgoings; // income minus expenses
+    
+    // If we're in surplus (income > outgoings), no runway concern
+    if (monthlyNet >= 0) {
+      return { months: null, netPosition, monthlyNet, totalIncome };
     }
+    
+    // Monthly deficit (how much we're losing per month after income)
+    const monthlyDeficit = Math.abs(monthlyNet);
     
     // If net position is negative, runway is 0
     if (netPosition <= 0) {
-      return { months: 0, netPosition };
+      return { months: 0, netPosition, monthlyNet, totalIncome };
     }
     
-    return { months: Math.floor(netPosition / monthlyDeficit), netPosition };
-  }, [summary]);
+    return { 
+      months: Math.floor(netPosition / monthlyDeficit), 
+      netPosition, 
+      monthlyNet, 
+      totalIncome 
+    };
+  }, [summary, totalIncome]);
 
   // Calculate projected annual interest
   const projectedAnnualInterest = useMemo(() => {
@@ -108,26 +137,41 @@ export function FinancialInsightsCard({ summary }: FinancialInsightsCardProps) {
       <div className="space-y-4">
         {/* Funds Runway */}
         <div className="p-3 rounded-lg bg-muted/50">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-2">
             <Clock className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Funds Runway</span>
           </div>
-          {savingsRunway.months !== null ? (
-            savingsRunway.months <= 0 ? (
+          
+          {/* Income breakdown */}
+          <div className="flex items-center gap-2 mb-2 text-xs">
+            <Wallet className="h-3 w-3 text-primary" />
+            <span className="text-muted-foreground">
+              Monthly income: <span className="text-primary font-medium">{formatCurrency(fundsRunway.totalIncome)}</span>
+            </span>
+            {temporaryIncome > 0 && (
+              <span className="flex items-center gap-0.5 text-warning">
+                <AlertCircle className="h-3 w-3" />
+                {formatCurrency(temporaryIncome)} temp
+              </span>
+            )}
+          </div>
+          
+          {fundsRunway.months !== null ? (
+            fundsRunway.months <= 0 ? (
               <p className="text-sm text-debt">
-                Your net position of <span className="font-medium">{formatCurrency(savingsRunway.netPosition)}</span> means 
-                you have no runway. Focus on paying down debt.
+                Your net position of <span className="font-medium">{formatCurrency(fundsRunway.netPosition)}</span> means 
+                you have no runway. Focus on increasing income or reducing expenses.
               </p>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Your net position of <span className={savingsRunway.netPosition >= 0 ? "text-savings font-medium" : "text-debt font-medium"}>{formatCurrency(savingsRunway.netPosition)}</span> will 
-                cover your monthly deficit of <span className="text-debt font-medium">{formatCurrency(Math.abs(summary.monthlySurplus))}</span> for 
-                approximately <span className="text-foreground font-bold">{savingsRunway.months} months</span>
+                Your net position of <span className={fundsRunway.netPosition >= 0 ? "text-savings font-medium" : "text-debt font-medium"}>{formatCurrency(fundsRunway.netPosition)}</span> will 
+                cover your monthly shortfall of <span className="text-debt font-medium">{formatCurrency(Math.abs(fundsRunway.monthlyNet))}</span> for 
+                approximately <span className="text-foreground font-bold">{fundsRunway.months} months</span>
               </p>
             )
           ) : (
             <p className="text-sm text-savings">
-              You're in surplus! Your funds are growing each month.
+              You're in surplus! Your income covers expenses with <span className="font-bold">{formatCurrency(fundsRunway.monthlyNet)}</span> to spare each month.
             </p>
           )}
         </div>
