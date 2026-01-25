@@ -61,12 +61,12 @@ export default function DebtDetail() {
     return Number(debt.minimum_payment);
   };
 
-  // Generate projected statement - use promo_start_date or calculate assumed start date
+  // Generate projected statement - incorporates actual payments and future projections
   const projectedStatement = useMemo(() => {
     if (!debt) return null;
     
-    const payment = getPaymentForMode(paymentMode);
-    if (payment <= 0) return { rows: [], isAssumed: false };
+    const plannedPayment = getPaymentForMode(paymentMode);
+    if (plannedPayment <= 0) return { rows: [], isAssumed: false };
     
     const originalBalance = Number(debt.starting_balance) > 0 ? Number(debt.starting_balance) : Number(debt.balance);
     if (originalBalance <= 0) return { rows: [], isAssumed: false };
@@ -75,45 +75,69 @@ export default function DebtDetail() {
     let isAssumed = false;
     
     if (debt.promo_start_date) {
-      // Use explicit promo start date
       startDate = startOfMonth(parseISO(debt.promo_start_date));
     } else {
-      // Calculate assumed start date by working backwards
-      // How many payments would it take to go from starting_balance to current balance?
       const currentBalance = Number(debt.balance);
       const paidSoFar = originalBalance - currentBalance;
-      const monthsPaid = paidSoFar > 0 ? Math.ceil(paidSoFar / payment) : 0;
-      
-      // Assume payments started X months ago from today
+      const monthsPaid = paidSoFar > 0 ? Math.ceil(paidSoFar / plannedPayment) : 0;
       const now = new Date();
       startDate = startOfMonth(addMonths(now, -monthsPaid));
       isAssumed = true;
     }
     
-    const rows: { date: Date; payment: number; balanceAfter: number; isCurrentMonth: boolean }[] = [];
+    // Group actual payments by month
+    const paymentsByMonth: Record<string, { total: number; isActual: boolean }> = {};
+    if (payments && payments.length > 0) {
+      payments.forEach(p => {
+        const monthKey = format(parseISO(p.paid_on), 'yyyy-MM');
+        if (!paymentsByMonth[monthKey]) {
+          paymentsByMonth[monthKey] = { total: 0, isActual: true };
+        }
+        paymentsByMonth[monthKey].total += Number(p.amount);
+      });
+    }
+    
+    const rows: { date: Date; payment: number; balanceAfter: number; isCurrentMonth: boolean; isActualPayment: boolean }[] = [];
     let runningBalance = originalBalance;
     const now = new Date();
-    
     let currentDate = startDate;
 
-    // Generate until balance reaches zero (no limit)
+    // Generate until balance reaches zero
     while (runningBalance > 0) {
-      const actualPayment = Math.min(payment, runningBalance);
-      runningBalance = Math.max(0, runningBalance - actualPayment);
+      const monthKey = format(currentDate, 'yyyy-MM');
+      const isPast = currentDate < startOfMonth(now);
       const isCurrentMonth = isSameMonth(currentDate, now);
+      
+      let paymentAmount: number;
+      let isActualPayment = false;
+      
+      // Use actual payment if recorded for this month
+      if (paymentsByMonth[monthKey]) {
+        paymentAmount = paymentsByMonth[monthKey].total;
+        isActualPayment = true;
+      } else if (isPast) {
+        // Past month with no recorded payment - assume planned payment was made
+        paymentAmount = Math.min(plannedPayment, runningBalance);
+      } else {
+        // Future or current month - use projected payment
+        paymentAmount = Math.min(plannedPayment, runningBalance);
+      }
+      
+      runningBalance = Math.max(0, runningBalance - paymentAmount);
       
       rows.push({
         date: new Date(currentDate),
-        payment: actualPayment,
+        payment: paymentAmount,
         balanceAfter: runningBalance,
         isCurrentMonth,
+        isActualPayment,
       });
       
       currentDate = addMonths(currentDate, 1);
     }
     
     return { rows, isAssumed };
-  }, [debt, paymentMode]);
+  }, [debt, paymentMode, payments]);
 
   // Calculate payoff info for header
   const payoffInfo = useMemo(() => {
@@ -388,16 +412,19 @@ export default function DebtDetail() {
                   className={`text-xs py-1.5 border-b border-border/50 last:border-0 ${row.isCurrentMonth ? 'bg-muted/50 rounded px-1 -mx-1' : ''}`}
                 >
                   <div className="grid grid-cols-3 gap-2">
-                    <span className="font-medium">
+                    <span className="font-medium flex items-center gap-1">
                       {format(row.date, 'MMM yyyy')}
-                      {row.isCurrentMonth && <span className="ml-1 text-primary font-bold">THIS MONTH</span>}
+                      {row.isCurrentMonth && <span className="text-primary font-bold text-[10px]">NOW</span>}
+                      {row.isActualPayment && <span className="text-savings text-[10px]">✓</span>}
                     </span>
-                    <span className="text-right text-savings">£{row.payment.toFixed(2)}</span>
+                    <span className={`text-right ${row.isActualPayment ? 'text-savings font-medium' : 'text-muted-foreground'}`}>
+                      £{row.payment.toFixed(2)}
+                    </span>
                     <span className="text-right font-medium">£{row.balanceAfter.toFixed(2)}</span>
                   </div>
                   {row.isCurrentMonth && (
                     <p className="text-muted-foreground mt-1">
-                      Due this month: £{row.payment.toFixed(2)} • Balance after: £{row.balanceAfter.toFixed(2)}
+                      {row.isActualPayment ? 'Paid' : 'Due'} this month: £{row.payment.toFixed(2)} • Balance after: £{row.balanceAfter.toFixed(2)}
                     </p>
                   )}
                 </div>
