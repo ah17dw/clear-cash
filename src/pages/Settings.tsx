@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, Phone, Camera, Bell, Shield } from 'lucide-react';
+import { Download, Phone, Camera, Bell, Shield, Building2 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import { useDebts, useSavingsAccounts, useIncomeSources, useExpenseItems } from 
 import { useIsAdmin } from '@/hooks/useAdmin';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { ConnectedAccountsCard } from '@/components/open-banking/ConnectedAccountsCard';
 
 interface Profile {
   phone_number: string | null;
@@ -219,6 +220,11 @@ export default function Settings() {
             />
           </div>
         </div>
+      </div>
+
+      {/* Open Banking */}
+      <div className="mb-4">
+        <ConnectedAccountsCard />
       </div>
 
       {/* Notifications */}
