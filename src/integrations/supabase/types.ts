@@ -65,6 +65,48 @@ export type Database = {
         }
         Relationships: []
       }
+      connected_bank_accounts: {
+        Row: {
+          account_ids: Json | null
+          consent_expires_at: string | null
+          consent_token: string
+          created_at: string
+          id: string
+          institution_id: string
+          institution_name: string
+          last_synced_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_ids?: Json | null
+          consent_expires_at?: string | null
+          consent_token: string
+          created_at?: string
+          id?: string
+          institution_id: string
+          institution_name: string
+          last_synced_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_ids?: Json | null
+          consent_expires_at?: string | null
+          consent_token?: string
+          created_at?: string
+          id?: string
+          institution_id?: string
+          institution_name?: string
+          last_synced_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       credit_report_entries: {
         Row: {
           account_status: string | null
@@ -702,6 +744,207 @@ export type Database = {
             columns: ["parent_expense_id"]
             isOneToOne: false
             referencedRelation: "expense_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      synced_bank_accounts: {
+        Row: {
+          account_name: string
+          account_type: string
+          available_balance: number | null
+          balance: number
+          connection_id: string
+          created_at: string
+          currency: string
+          external_account_id: string
+          id: string
+          last_synced_at: string | null
+          linked_debt_id: string | null
+          linked_savings_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_name: string
+          account_type: string
+          available_balance?: number | null
+          balance?: number
+          connection_id: string
+          created_at?: string
+          currency?: string
+          external_account_id: string
+          id?: string
+          last_synced_at?: string | null
+          linked_debt_id?: string | null
+          linked_savings_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_name?: string
+          account_type?: string
+          available_balance?: number | null
+          balance?: number
+          connection_id?: string
+          created_at?: string
+          currency?: string
+          external_account_id?: string
+          id?: string
+          last_synced_at?: string | null
+          linked_debt_id?: string | null
+          linked_savings_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "synced_bank_accounts_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "connected_bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "synced_bank_accounts_linked_debt_id_fkey"
+            columns: ["linked_debt_id"]
+            isOneToOne: false
+            referencedRelation: "debts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "synced_bank_accounts_linked_savings_id_fkey"
+            columns: ["linked_savings_id"]
+            isOneToOne: false
+            referencedRelation: "savings_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      synced_standing_orders: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          external_order_id: string
+          final_payment_date: string | null
+          first_payment_date: string | null
+          frequency: string | null
+          id: string
+          linked_expense_id: string | null
+          next_payment_date: string | null
+          payee_name: string | null
+          reference: string | null
+          status: string
+          synced_account_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency?: string
+          external_order_id: string
+          final_payment_date?: string | null
+          first_payment_date?: string | null
+          frequency?: string | null
+          id?: string
+          linked_expense_id?: string | null
+          next_payment_date?: string | null
+          payee_name?: string | null
+          reference?: string | null
+          status?: string
+          synced_account_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          external_order_id?: string
+          final_payment_date?: string | null
+          first_payment_date?: string | null
+          frequency?: string | null
+          id?: string
+          linked_expense_id?: string | null
+          next_payment_date?: string | null
+          payee_name?: string | null
+          reference?: string | null
+          status?: string
+          synced_account_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "synced_standing_orders_linked_expense_id_fkey"
+            columns: ["linked_expense_id"]
+            isOneToOne: false
+            referencedRelation: "expense_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "synced_standing_orders_synced_account_id_fkey"
+            columns: ["synced_account_id"]
+            isOneToOne: false
+            referencedRelation: "synced_bank_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      synced_transactions: {
+        Row: {
+          amount: number
+          booking_date: string | null
+          category: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          external_transaction_id: string
+          id: string
+          merchant_name: string | null
+          status: string
+          synced_account_id: string
+          transaction_date: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          booking_date?: string | null
+          category?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          external_transaction_id: string
+          id?: string
+          merchant_name?: string | null
+          status?: string
+          synced_account_id: string
+          transaction_date: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          booking_date?: string | null
+          category?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          external_transaction_id?: string
+          id?: string
+          merchant_name?: string | null
+          status?: string
+          synced_account_id?: string
+          transaction_date?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "synced_transactions_synced_account_id_fkey"
+            columns: ["synced_account_id"]
+            isOneToOne: false
+            referencedRelation: "synced_bank_accounts"
             referencedColumns: ["id"]
           },
         ]

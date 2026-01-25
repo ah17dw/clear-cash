@@ -19,6 +19,7 @@ import Renewals from "./pages/Renewals";
 import History from "./pages/History";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
+import OpenBankingCallback from "./pages/OpenBankingCallback";
 
 const queryClient = new QueryClient();
 
@@ -143,6 +144,7 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route path="/open-banking-callback" element={<OpenBankingCallback />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       {user && <BottomNav />}
