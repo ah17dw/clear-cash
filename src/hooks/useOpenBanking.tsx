@@ -3,14 +3,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
 
-export interface Institution {
-  id: string;
-  name: string;
-  fullName?: string;
-  countries?: { countryCode2: string }[];
-  media?: { source: string; type: string }[];
-}
-
 export interface ConnectedBankAccount {
   id: string;
   user_id: string;
@@ -79,17 +71,6 @@ async function callOpenBanking(action: string, params: Record<string, any> = {})
   }
 
   return response.data;
-}
-
-export function useInstitutions() {
-  return useQuery({
-    queryKey: ["open-banking-institutions"],
-    queryFn: async () => {
-      const data = await callOpenBanking("get-institutions");
-      return data.institutions as Institution[];
-    },
-    staleTime: 24 * 60 * 60 * 1000, // Cache for 24 hours
-  });
 }
 
 export function useConnectedBankAccounts() {
@@ -180,24 +161,27 @@ export function useSyncedStandingOrders(accountId?: string) {
   });
 }
 
-export function useCreateAuthorization() {
+export function useCreateLinkToken() {
   return useMutation({
-    mutationFn: async ({ institutionId, callbackUrl }: { institutionId: string; callbackUrl: string }) => {
-      return await callOpenBanking("create-authorization", { institutionId, callbackUrl });
+    mutationFn: async ({ redirectUri }: { redirectUri: string }) => {
+      return await callOpenBanking("create-link-token", { redirectUri });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
     },
   });
 }
 
-export function useExchangeConsent() {
+export function useExchangeToken() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ consentToken, institutionId, institutionName }: { 
-      consentToken: string; 
-      institutionId: string; 
-      institutionName: string;
+    mutationFn: async ({ publicToken, institutionId, institutionName }: { 
+      publicToken: string; 
+      institutionId?: string; 
+      institutionName?: string;
     }) => {
-      return await callOpenBanking("exchange-consent", { consentToken, institutionId, institutionName });
+      return await callOpenBanking("exchange-token", { publicToken, institutionId, institutionName });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["connected-bank-accounts"] });
