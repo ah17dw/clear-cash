@@ -71,10 +71,23 @@ serve(async (req) => {
         const response = await yapilyRequest("/institutions");
         const data = await response.json();
         
+        console.log("Yapily institutions response status:", response.status);
+        console.log("Yapily institutions count:", data.data?.length || 0);
+        
+        if (!response.ok) {
+          console.error("Yapily API error:", JSON.stringify(data));
+          return new Response(JSON.stringify({ error: data.error?.message || "Failed to fetch institutions" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        
         // Filter to UK institutions only
         const ukInstitutions = data.data?.filter((inst: any) => 
           inst.countries?.some((c: any) => c.countryCode2 === "GB")
         ) || [];
+        
+        console.log("UK institutions found:", ukInstitutions.length);
         
         return new Response(JSON.stringify({ institutions: ukInstitutions }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
