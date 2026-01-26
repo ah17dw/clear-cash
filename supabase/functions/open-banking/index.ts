@@ -6,7 +6,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const YAPILY_API_URL = "https://api.yapily.com";
+// Use sandbox or production based on environment variable
+const YAPILY_ENVIRONMENT = Deno.env.get("YAPILY_ENVIRONMENT") || "sandbox";
+const YAPILY_API_URL = YAPILY_ENVIRONMENT === "production" 
+  ? "https://api.yapily.com" 
+  : "https://sandbox.api.yapily.com";
 
 async function getYapilyAuth(): Promise<string> {
   const appKey = Deno.env.get("YAPILY_APPLICATION_KEY");
