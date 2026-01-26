@@ -1,11 +1,9 @@
-import { useState, useEffect } from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useState, useCallback } from "react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useInstitutions, useCreateAuthorization, useExchangeConsent, Institution } from "@/hooks/useOpenBanking";
-import { Building2, Search, ExternalLink, Loader2 } from "lucide-react";
+import { usePlaidLink } from "react-plaid-link";
+import { useCreateLinkToken, useExchangeToken } from "@/hooks/useOpenBanking";
+import { Building2, Loader2, Link2 } from "lucide-react";
 
 interface ConnectBankSheetProps {
   open: boolean;
@@ -13,76 +11,55 @@ interface ConnectBankSheetProps {
 }
 
 export function ConnectBankSheet({ open, onOpenChange }: ConnectBankSheetProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedInstitution, setSelectedInstitution] = useState<Institution | null>(null);
-  const [pendingConsent, setPendingConsent] = useState<{ institutionId: string; institutionName: string } | null>(null);
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   
-  const { data: institutions, isLoading } = useInstitutions();
-  const createAuth = useCreateAuthorization();
-  const exchangeConsent = useExchangeConsent();
+  const createLinkToken = useCreateLinkToken();
+  const exchangeToken = useExchangeToken();
 
-  const filteredInstitutions = institutions?.filter(inst => 
-    inst.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    inst.fullName?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Handle OAuth callback
-  useEffect(() => {
-    const handleMessage = async (event: MessageEvent) => {
-      if (event.data?.type === "open-banking-callback" && event.data?.consent) {
-        if (pendingConsent) {
-          await exchangeConsent.mutateAsync({
-            consentToken: event.data.consent,
-            institutionId: pendingConsent.institutionId,
-            institutionName: pendingConsent.institutionName,
-          });
-          setPendingConsent(null);
-          setSelectedInstitution(null);
-          onOpenChange(false);
-        }
-      }
-    };
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [pendingConsent, exchangeConsent, onOpenChange]);
-
-  const handleConnect = async (institution: Institution) => {
-    setSelectedInstitution(institution);
-    setPendingConsent({ institutionId: institution.id, institutionName: institution.name });
-    
+  const onSuccess = useCallback(async (publicToken: string, metadata: any) => {
     try {
-      const callbackUrl = `${window.location.origin}/open-banking-callback`;
-      const result = await createAuth.mutateAsync({ 
-        institutionId: institution.id, 
-        callbackUrl 
+      await exchangeToken.mutateAsync({
+        publicToken,
+        institutionId: metadata.institution?.institution_id,
+        institutionName: metadata.institution?.name,
       });
-      
-      if (result.authorisationUrl) {
-        // Open bank's authorization page in a popup
-        const popup = window.open(
-          result.authorisationUrl, 
-          "open-banking-auth",
-          "width=600,height=700,scrollbars=yes"
-        );
-        
-        // Poll for popup close
-        const pollTimer = setInterval(() => {
-          if (popup?.closed) {
-            clearInterval(pollTimer);
-            setSelectedInstitution(null);
-          }
-        }, 500);
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Failed to exchange token:", error);
+    }
+  }, [exchangeToken, onOpenChange]);
+
+  const onExit = useCallback(() => {
+    setLinkToken(null);
+  }, []);
+
+  const { open: openPlaid, ready } = usePlaidLink({
+    token: linkToken,
+    onSuccess,
+    onExit,
+  });
+
+  const handleStartConnect = async () => {
+    setIsLoading(true);
+    try {
+      const redirectUri = `${window.location.origin}/open-banking-callback`;
+      const result = await createLinkToken.mutateAsync({ redirectUri });
+      if (result.linkToken) {
+        setLinkToken(result.linkToken);
       }
     } catch (error) {
-      setSelectedInstitution(null);
-      setPendingConsent(null);
+      console.error("Failed to create link token:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const getInstitutionLogo = (institution: Institution) => {
-    const iconMedia = institution.media?.find(m => m.type === "icon");
-    return iconMedia?.source;
+  // Open Plaid Link when ready and token is available
+  const handleOpenPlaid = () => {
+    if (ready && linkToken) {
+      openPlaid();
+    }
   };
 
   return (
@@ -93,81 +70,95 @@ export function ConnectBankSheet({ open, onOpenChange }: ConnectBankSheetProps) 
             <Building2 className="h-5 w-5" />
             Connect Bank Account
           </SheetTitle>
+          <SheetDescription>
+            Securely connect your bank to automatically sync balances and transactions.
+          </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-6 space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search banks..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+        <div className="mt-6 space-y-6">
+          <div className="bg-muted/50 rounded-lg p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <Link2 className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">Secure Connection</p>
+                <p className="text-sm text-muted-foreground">
+                  We use Plaid to securely connect to your bank. Your login credentials are never shared with us.
+                </p>
+              </div>
+            </div>
           </div>
 
-          <ScrollArea className="h-[60vh]">
-            {isLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3">
-                    <Skeleton className="h-10 w-10 rounded-lg" />
-                    <Skeleton className="h-4 w-32" />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {filteredInstitutions?.map((institution) => {
-                  const logo = getInstitutionLogo(institution);
-                  const isConnecting = selectedInstitution?.id === institution.id;
-                  
-                  return (
-                    <button
-                      key={institution.id}
-                      onClick={() => handleConnect(institution)}
-                      disabled={isConnecting || createAuth.isPending}
-                      className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors text-left disabled:opacity-50"
-                    >
-                      {logo ? (
-                        <img 
-                          src={logo} 
-                          alt={institution.name}
-                          className="h-10 w-10 rounded-lg object-contain bg-background border"
-                        />
-                      ) : (
-                        <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
-                          <Building2 className="h-5 w-5 text-muted-foreground" />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{institution.name}</p>
-                        {institution.fullName && institution.fullName !== institution.name && (
-                          <p className="text-sm text-muted-foreground truncate">
-                            {institution.fullName}
-                          </p>
-                        )}
-                      </div>
-                      {isConnecting ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      ) : (
-                        <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </button>
-                  );
-                })}
+          <div className="space-y-3">
+            <h4 className="font-medium text-sm">What you'll get:</h4>
+            <ul className="text-sm text-muted-foreground space-y-2">
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                Real-time account balances
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                Transaction history (up to 2 years)
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                Automatic categorization
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                Link to existing savings & debts
+              </li>
+            </ul>
+          </div>
 
-                {filteredInstitutions?.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No banks found matching "{searchQuery}"
-                  </div>
+          <div className="space-y-3">
+            {!linkToken ? (
+              <Button 
+                onClick={handleStartConnect} 
+                className="w-full" 
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Preparing...
+                  </>
+                ) : (
+                  <>
+                    <Building2 className="h-4 w-4 mr-2" />
+                    Connect Your Bank
+                  </>
                 )}
-              </div>
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleOpenPlaid} 
+                className="w-full"
+                disabled={!ready || exchangeToken.isPending}
+              >
+                {exchangeToken.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Connecting...
+                  </>
+                ) : !ready ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Building2 className="h-4 w-4 mr-2" />
+                    Open Bank Selector
+                  </>
+                )}
+              </Button>
             )}
-          </ScrollArea>
+          </div>
 
           <p className="text-xs text-muted-foreground text-center">
-            Powered by Open Banking. Your data is encrypted and secure.
+            Powered by Plaid. Your data is encrypted and secure.
           </p>
         </div>
       </SheetContent>

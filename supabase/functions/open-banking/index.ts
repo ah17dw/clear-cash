@@ -6,31 +6,41 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Yapily uses the same URL for both sandbox and production
-// The credentials determine which environment you're in
-const YAPILY_API_URL = "https://api.yapily.com";
+// Plaid API - same URL for all environments, keys determine environment
+const PLAID_API_URL = "https://production.plaid.com";
+const PLAID_SANDBOX_URL = "https://sandbox.plaid.com";
+const PLAID_DEVELOPMENT_URL = "https://development.plaid.com";
 
-async function getYapilyAuth(): Promise<string> {
-  const appKey = Deno.env.get("YAPILY_APPLICATION_KEY");
-  const appSecret = Deno.env.get("YAPILY_APPLICATION_SECRET");
-  
-  if (!appKey || !appSecret) {
-    throw new Error("Yapily credentials not configured");
+function getPlaidUrl(): string {
+  const env = Deno.env.get("PLAID_ENV") || "sandbox";
+  switch (env) {
+    case "production":
+      return PLAID_API_URL;
+    case "development":
+      return PLAID_DEVELOPMENT_URL;
+    default:
+      return PLAID_SANDBOX_URL;
   }
-  
-  return btoa(`${appKey}:${appSecret}`);
 }
 
-async function yapilyRequest(path: string, options: RequestInit = {}): Promise<Response> {
-  const auth = await getYapilyAuth();
+async function plaidRequest(path: string, body: Record<string, unknown>): Promise<Response> {
+  const clientId = Deno.env.get("PLAID_CLIENT_ID");
+  const secret = Deno.env.get("PLAID_SECRET");
   
-  const response = await fetch(`${YAPILY_API_URL}${path}`, {
-    ...options,
+  if (!clientId || !secret) {
+    throw new Error("Plaid credentials not configured");
+  }
+  
+  const response = await fetch(`${getPlaidUrl()}${path}`, {
+    method: "POST",
     headers: {
-      "Authorization": `Basic ${auth}`,
       "Content-Type": "application/json",
-      ...options.headers,
     },
+    body: JSON.stringify({
+      client_id: clientId,
+      secret: secret,
+      ...body,
+    }),
   });
   
   return response;
@@ -69,120 +79,103 @@ serve(async (req) => {
     const { action, ...params } = await req.json();
 
     switch (action) {
-      case "get-institutions": {
-        const response = await yapilyRequest("/institutions");
-        const data = await response.json();
+      case "create-link-token": {
+        const response = await plaidRequest("/link/token/create", {
+          user: { client_user_id: userId },
+          client_name: "AH Finance",
+          products: ["transactions"],
+          country_codes: ["GB"],
+          language: "en",
+          redirect_uri: params.redirectUri,
+        });
         
-        console.log("Yapily institutions response status:", response.status);
-        console.log("Yapily institutions count:", data.data?.length || 0);
+        const data = await response.json();
+        console.log("Plaid link token response status:", response.status);
         
         if (!response.ok) {
-          console.error("Yapily API error:", JSON.stringify(data));
-          return new Response(JSON.stringify({ error: data.error?.message || "Failed to fetch institutions" }), {
+          console.error("Plaid API error:", JSON.stringify(data));
+          return new Response(JSON.stringify({ error: data.error_message || "Failed to create link token" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
         
-        // Filter to UK institutions only
-        const ukInstitutions = data.data?.filter((inst: any) => 
-          inst.countries?.some((c: any) => c.countryCode2 === "GB")
-        ) || [];
-        
-        console.log("UK institutions found:", ukInstitutions.length);
-        
-        return new Response(JSON.stringify({ institutions: ukInstitutions }), {
+        return new Response(JSON.stringify({ linkToken: data.link_token }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      case "create-authorization": {
-        const { institutionId, callbackUrl } = params;
+      case "exchange-token": {
+        const { publicToken, institutionId, institutionName } = params;
         
-        const response = await yapilyRequest("/account-auth-requests", {
-          method: "POST",
-          body: JSON.stringify({
-            applicationUserId: userId,
-            institutionId,
-            callback: callbackUrl,
-            accountRequest: {
-              transactionFrom: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-              transactionTo: new Date().toISOString().split("T")[0],
-              expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-              featureScope: ["ACCOUNTS", "ACCOUNT_TRANSACTIONS", "ACCOUNT_STATEMENTS", "ACCOUNT_SCHEDULED_PAYMENTS"],
-            },
-          }),
+        // Exchange public token for access token
+        const exchangeResponse = await plaidRequest("/item/public_token/exchange", {
+          public_token: publicToken,
         });
-
-        const data = await response.json();
         
-        if (!response.ok) {
-          console.error("Yapily authorization error:", data);
-          return new Response(JSON.stringify({ error: data.error?.message || "Failed to create authorization" }), {
+        const exchangeData = await exchangeResponse.json();
+        
+        if (!exchangeResponse.ok) {
+          console.error("Plaid exchange error:", exchangeData);
+          return new Response(JSON.stringify({ error: exchangeData.error_message || "Failed to exchange token" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-
-        return new Response(JSON.stringify({ 
-          authorisationUrl: data.data?.authorisationUrl,
-          userUuid: data.data?.userUuid,
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      case "exchange-consent": {
-        const { consentToken, institutionId, institutionName } = params;
         
-        // Store the consent
+        const accessToken = exchangeData.access_token;
+        const itemId = exchangeData.item_id;
+        
+        // Store the connection
         const { data: connection, error: connError } = await supabase
           .from("connected_bank_accounts")
           .insert({
             user_id: userId,
-            institution_id: institutionId,
-            institution_name: institutionName,
-            consent_token: consentToken,
-            consent_expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+            institution_id: institutionId || itemId,
+            institution_name: institutionName || "Connected Bank",
+            consent_token: accessToken,
+            consent_expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // Plaid tokens don't expire
             status: "active",
           })
           .select()
           .single();
 
         if (connError) {
-          console.error("Error storing consent:", connError);
-          return new Response(JSON.stringify({ error: "Failed to store consent" }), {
+          console.error("Error storing connection:", connError);
+          return new Response(JSON.stringify({ error: "Failed to store connection" }), {
             status: 500,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
 
         // Fetch accounts
-        const accountsResponse = await yapilyRequest("/accounts", {
-          headers: { "Consent": consentToken },
+        const accountsResponse = await plaidRequest("/accounts/balance/get", {
+          access_token: accessToken,
         });
         const accountsData = await accountsResponse.json();
-
-        if (accountsData.data) {
-          for (const account of accountsData.data) {
+        
+        let accountsCount = 0;
+        if (accountsData.accounts) {
+          for (const account of accountsData.accounts) {
             await supabase.from("synced_bank_accounts").insert({
               user_id: userId,
               connection_id: connection.id,
-              external_account_id: account.id,
-              account_type: account.accountType || "UNKNOWN",
-              account_name: account.accountNames?.[0]?.name || account.nickname || "Account",
-              currency: account.currency || "GBP",
-              balance: account.balance || 0,
-              available_balance: account.availableBalance,
+              external_account_id: account.account_id,
+              account_type: account.type?.toUpperCase() || "UNKNOWN",
+              account_name: account.name || account.official_name || "Account",
+              currency: account.balances?.iso_currency_code || "GBP",
+              balance: account.balances?.current || 0,
+              available_balance: account.balances?.available,
               last_synced_at: new Date().toISOString(),
             });
+            accountsCount++;
           }
         }
 
         return new Response(JSON.stringify({ 
           success: true, 
           connectionId: connection.id,
-          accountsCount: accountsData.data?.length || 0,
+          accountsCount,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -205,47 +198,46 @@ serve(async (req) => {
           });
         }
 
-        const consentToken = connection.consent_token;
+        const accessToken = connection.consent_token;
 
-        // Fetch accounts
-        const accountsResponse = await yapilyRequest("/accounts", {
-          headers: { "Consent": consentToken },
+        // Fetch accounts and balances
+        const accountsResponse = await plaidRequest("/accounts/balance/get", {
+          access_token: accessToken,
         });
         const accountsData = await accountsResponse.json();
 
         if (!accountsResponse.ok) {
-          console.error("Yapily accounts error:", accountsData);
+          console.error("Plaid accounts error:", accountsData);
           
-          // Mark connection as expired if consent is invalid
-          if (accountsData.error?.code === "CONSENT_EXPIRED" || accountsData.error?.code === "CONSENT_REVOKED") {
+          // Check for item errors (needs re-auth)
+          if (accountsData.error_code === "ITEM_LOGIN_REQUIRED") {
             await supabase
               .from("connected_bank_accounts")
               .update({ status: "expired" })
               .eq("id", connectionId);
           }
           
-          return new Response(JSON.stringify({ error: accountsData.error?.message || "Failed to sync accounts" }), {
+          return new Response(JSON.stringify({ error: accountsData.error_message || "Failed to sync accounts" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
 
         let transactionCount = 0;
-        let standingOrderCount = 0;
 
-        for (const account of accountsData.data || []) {
+        for (const account of accountsData.accounts || []) {
           // Upsert account
           const { data: syncedAccount } = await supabase
             .from("synced_bank_accounts")
             .upsert({
               user_id: userId,
               connection_id: connectionId,
-              external_account_id: account.id,
-              account_type: account.accountType || "UNKNOWN",
-              account_name: account.accountNames?.[0]?.name || account.nickname || "Account",
-              currency: account.currency || "GBP",
-              balance: account.balance || 0,
-              available_balance: account.availableBalance,
+              external_account_id: account.account_id,
+              account_type: account.type?.toUpperCase() || "UNKNOWN",
+              account_name: account.name || account.official_name || "Account",
+              currency: account.balances?.iso_currency_code || "GBP",
+              balance: account.balances?.current || 0,
+              available_balance: account.balances?.available,
               last_synced_at: new Date().toISOString(),
             }, { onConflict: "connection_id,external_account_id" })
             .select()
@@ -257,71 +249,55 @@ serve(async (req) => {
           if (syncedAccount.linked_savings_id) {
             await supabase
               .from("savings_accounts")
-              .update({ balance: account.balance || 0 })
+              .update({ balance: account.balances?.current || 0 })
               .eq("id", syncedAccount.linked_savings_id);
           }
           if (syncedAccount.linked_debt_id) {
             await supabase
               .from("debts")
-              .update({ balance: Math.abs(account.balance || 0) })
+              .update({ balance: Math.abs(account.balances?.current || 0) })
               .eq("id", syncedAccount.linked_debt_id);
           }
+        }
 
-          // Fetch transactions
-          const txResponse = await yapilyRequest(`/accounts/${account.id}/transactions`, {
-            headers: { "Consent": consentToken },
-          });
-          const txData = await txResponse.json();
+        // Fetch transactions using transactions/sync
+        const { data: existingAccounts } = await supabase
+          .from("synced_bank_accounts")
+          .select("id, external_account_id")
+          .eq("connection_id", connectionId);
 
-          if (txData.data) {
-            for (const tx of txData.data) {
-              const { error: txError } = await supabase
-                .from("synced_transactions")
-                .upsert({
-                  user_id: userId,
-                  synced_account_id: syncedAccount.id,
-                  external_transaction_id: tx.id,
-                  amount: tx.amount || 0,
-                  currency: tx.currency || "GBP",
-                  description: tx.description || tx.reference,
-                  merchant_name: tx.merchant?.merchantName,
-                  category: tx.enrichment?.category?.mainCategory,
-                  transaction_date: tx.date || tx.bookingDateTime?.split("T")[0],
-                  booking_date: tx.bookingDateTime?.split("T")[0],
-                  status: tx.status || "booked",
-                }, { onConflict: "synced_account_id,external_transaction_id" });
-              
-              if (!txError) transactionCount++;
-            }
-          }
+        const accountIdMap = new Map(
+          existingAccounts?.map(a => [a.external_account_id, a.id]) || []
+        );
 
-          // Fetch standing orders
-          const soResponse = await yapilyRequest(`/accounts/${account.id}/scheduled-payments`, {
-            headers: { "Consent": consentToken },
-          });
-          const soData = await soResponse.json();
+        const txResponse = await plaidRequest("/transactions/sync", {
+          access_token: accessToken,
+          count: 100,
+        });
+        const txData = await txResponse.json();
 
-          if (soData.data) {
-            for (const so of soData.data) {
-              const { error: soError } = await supabase
-                .from("synced_standing_orders")
-                .upsert({
-                  user_id: userId,
-                  synced_account_id: syncedAccount.id,
-                  external_order_id: so.id,
-                  amount: so.amountDetails?.amount || 0,
-                  currency: so.amountDetails?.currency || "GBP",
-                  reference: so.reference,
-                  payee_name: so.payee?.name,
-                  frequency: so.scheduledPaymentType,
-                  next_payment_date: so.scheduledPaymentDateTime?.split("T")[0],
-                  first_payment_date: so.firstPaymentDateTime?.split("T")[0],
-                  final_payment_date: so.finalPaymentDateTime?.split("T")[0],
-                  status: so.status || "active",
-                }, { onConflict: "synced_account_id,external_order_id" });
-              
-              if (!soError) standingOrderCount++;
-            }
+        if (txData.added) {
+          for (const tx of txData.added) {
+            const syncedAccountId = accountIdMap.get(tx.account_id);
+            if (!syncedAccountId) continue;
+
+            const { error: txError } = await supabase
+              .from("synced_transactions")
+              .upsert({
+                user_id: userId,
+                synced_account_id: syncedAccountId,
+                external_transaction_id: tx.transaction_id,
+                amount: tx.amount * -1, // Plaid uses negative for credits
+                currency: tx.iso_currency_code || "GBP",
+                description: tx.name,
+                merchant_name: tx.merchant_name,
+                category: tx.personal_finance_category?.primary,
+                transaction_date: tx.date,
+                booking_date: tx.authorized_date,
+                status: tx.pending ? "pending" : "booked",
+              }, { onConflict: "synced_account_id,external_transaction_id" });
+            
+            if (!txError) transactionCount++;
           }
         }
 
@@ -333,9 +309,8 @@ serve(async (req) => {
 
         return new Response(JSON.stringify({ 
           success: true,
-          accountsCount: accountsData.data?.length || 0,
+          accountsCount: accountsData.accounts?.length || 0,
           transactionCount,
-          standingOrderCount,
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -343,6 +318,21 @@ serve(async (req) => {
 
       case "disconnect": {
         const { connectionId } = params;
+
+        // Get the connection to remove item from Plaid
+        const { data: connection } = await supabase
+          .from("connected_bank_accounts")
+          .select("consent_token")
+          .eq("id", connectionId)
+          .eq("user_id", userId)
+          .single();
+
+        if (connection?.consent_token) {
+          // Remove item from Plaid
+          await plaidRequest("/item/remove", {
+            access_token: connection.consent_token,
+          });
+        }
 
         const { error } = await supabase
           .from("connected_bank_accounts")
