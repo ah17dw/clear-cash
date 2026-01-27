@@ -43,8 +43,9 @@ export function ConnectBankSheet({ open, onOpenChange }: ConnectBankSheetProps) 
   const handleStartConnect = async () => {
     setIsLoading(true);
     try {
-      const redirectUri = `${window.location.origin}/open-banking-callback`;
-      const result = await createLinkToken.mutateAsync({ redirectUri });
+      // Don't send redirect URI for sandbox - only needed for OAuth in production
+      // If you configure OAuth redirect URIs in Plaid Dashboard, you can pass them here
+      const result = await createLinkToken.mutateAsync({});
       if (result.linkToken) {
         setLinkToken(result.linkToken);
       }

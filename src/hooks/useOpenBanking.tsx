@@ -163,8 +163,8 @@ export function useSyncedStandingOrders(accountId?: string) {
 
 export function useCreateLinkToken() {
   return useMutation({
-    mutationFn: async ({ redirectUri }: { redirectUri: string }) => {
-      return await callOpenBanking("create-link-token", { redirectUri });
+    mutationFn: async ({ redirectUri }: { redirectUri?: string } = {}) => {
+      return await callOpenBanking("create-link-token", redirectUri ? { redirectUri } : {});
     },
     onError: (error: Error) => {
       toast.error(error.message);
