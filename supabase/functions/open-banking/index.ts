@@ -80,14 +80,21 @@ serve(async (req) => {
 
     switch (action) {
       case "create-link-token": {
-        const response = await plaidRequest("/link/token/create", {
+        // Build request body - only include redirect_uri if provided and configured in Plaid Dashboard
+        const linkTokenBody: Record<string, unknown> = {
           user: { client_user_id: userId },
           client_name: "AH Finance",
           products: ["transactions"],
           country_codes: ["GB"],
           language: "en",
-          redirect_uri: params.redirectUri,
-        });
+        };
+        
+        // Only add redirect_uri if provided (required for OAuth banks like UK banks in production)
+        if (params.redirectUri) {
+          linkTokenBody.redirect_uri = params.redirectUri;
+        }
+        
+        const response = await plaidRequest("/link/token/create", linkTokenBody);
         
         const data = await response.json();
         console.log("Plaid link token response status:", response.status);
