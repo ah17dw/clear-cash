@@ -6,21 +6,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Plaid API - same URL for all environments, keys determine environment
-const PLAID_API_URL = "https://production.plaid.com";
+// Plaid API - only has Sandbox and Production environments
+// Note: "development" environment no longer exists - Plaid consolidated to just sandbox/production
+const PLAID_PRODUCTION_URL = "https://production.plaid.com";
 const PLAID_SANDBOX_URL = "https://sandbox.plaid.com";
-const PLAID_DEVELOPMENT_URL = "https://development.plaid.com";
 
 function getPlaidUrl(): string {
   const env = Deno.env.get("PLAID_ENV") || "sandbox";
-  switch (env) {
-    case "production":
-      return PLAID_API_URL;
-    case "development":
-      return PLAID_DEVELOPMENT_URL;
-    default:
-      return PLAID_SANDBOX_URL;
+  // Both "development" and "production" use Production URL (development keys work on production endpoint)
+  if (env === "production" || env === "development") {
+    return PLAID_PRODUCTION_URL;
   }
+  return PLAID_SANDBOX_URL;
 }
 
 async function plaidRequest(path: string, body: Record<string, unknown>): Promise<Response> {
