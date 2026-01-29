@@ -12,6 +12,8 @@ export interface ConnectedBankAccount {
   last_synced_at: string | null;
   status: string;
   created_at: string;
+  provider: string;
+  requisition_id: string | null;
 }
 
 export interface SyncedBankAccount {
