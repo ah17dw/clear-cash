@@ -6,11 +6,20 @@ export default function OpenBankingCallback() {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
+    const provider = searchParams.get("provider");
     const consent = searchParams.get("consent");
     const error = searchParams.get("error");
+    const ref = searchParams.get("ref");
 
     if (window.opener) {
-      if (consent) {
+      if (provider === "nordigen") {
+        // Nordigen callback - send ref back to parent
+        window.opener.postMessage({
+          type: "nordigen-callback",
+          ref: ref || searchParams.get("reference"),
+        }, window.location.origin);
+      } else if (consent) {
+        // Plaid callback
         window.opener.postMessage({
           type: "open-banking-callback",
           consent,

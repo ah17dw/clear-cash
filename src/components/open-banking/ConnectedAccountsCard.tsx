@@ -8,8 +8,10 @@ import {
   useSyncedBankAccounts, 
   useSyncAccounts,
   useDisconnectBank,
-  SyncedBankAccount 
+  SyncedBankAccount,
+  ConnectedBankAccount 
 } from "@/hooks/useOpenBanking";
+import { useSyncNordigenAccounts, useDisconnectNordigenBank } from "@/hooks/useNordigen";
 import { ConnectBankSheet } from "./ConnectBankSheet";
 import { AccountLinkSheet } from "./AccountLinkSheet";
 import { TransactionsSheet } from "./TransactionsSheet";
@@ -22,7 +24,7 @@ import {
   ChevronRight,
   Clock,
   CheckCircle,
-  AlertCircle
+  Sparkles
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { AmountDisplay } from "@/components/ui/amount-display";
@@ -32,14 +34,17 @@ export function ConnectedAccountsCard() {
   const [showConnectSheet, setShowConnectSheet] = useState(false);
   const [linkingAccount, setLinkingAccount] = useState<SyncedBankAccount | null>(null);
   const [viewingTransactions, setViewingTransactions] = useState<SyncedBankAccount | null>(null);
-  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  const [disconnectingConnection, setDisconnectingConnection] = useState<ConnectedBankAccount | null>(null);
   
   const { data: connections, isLoading: connectionsLoading } = useConnectedBankAccounts();
   const { data: accounts, isLoading: accountsLoading } = useSyncedBankAccounts();
-  const syncAccounts = useSyncAccounts();
-  const disconnectBank = useDisconnectBank();
+  const syncPlaidAccounts = useSyncAccounts();
+  const syncNordigenAccounts = useSyncNordigenAccounts();
+  const disconnectPlaidBank = useDisconnectBank();
+  const disconnectNordigenBank = useDisconnectNordigenBank();
 
   const isLoading = connectionsLoading || accountsLoading;
+  const isSyncing = syncPlaidAccounts.isPending || syncNordigenAccounts.isPending;
 
   const getStatusBadge = (status: string, expiresAt: string | null) => {
     if (status === "expired") {
@@ -51,15 +56,35 @@ export function ConnectedAccountsCard() {
     return <Badge className="bg-primary text-primary-foreground">Active</Badge>;
   };
 
-  const handleSync = async (connectionId: string) => {
-    await syncAccounts.mutateAsync(connectionId);
+  const handleSync = async (connection: ConnectedBankAccount) => {
+    if (connection.provider === "nordigen") {
+      await syncNordigenAccounts.mutateAsync(connection.id);
+    } else {
+      await syncPlaidAccounts.mutateAsync(connection.id);
+    }
   };
 
   const handleDisconnect = async () => {
-    if (disconnectingId) {
-      await disconnectBank.mutateAsync(disconnectingId);
-      setDisconnectingId(null);
+    if (disconnectingConnection) {
+      if (disconnectingConnection.provider === "nordigen") {
+        await disconnectNordigenBank.mutateAsync(disconnectingConnection.id);
+      } else {
+        await disconnectPlaidBank.mutateAsync(disconnectingConnection.id);
+      }
+      setDisconnectingConnection(null);
     }
+  };
+
+  const getProviderBadge = (provider: string) => {
+    if (provider === "nordigen") {
+      return (
+        <Badge variant="outline" className="text-xs gap-1">
+          <Sparkles className="h-3 w-3" />
+          Free
+        </Badge>
+      );
+    }
+    return null;
   };
 
   return (
@@ -108,20 +133,21 @@ export function ConnectedAccountsCard() {
                       <div className="flex items-center gap-2">
                         <h4 className="font-medium">{connection.institution_name}</h4>
                         {getStatusBadge(connection.status, connection.consent_expires_at)}
+                        {getProviderBadge(connection.provider)}
                       </div>
                       <div className="flex items-center gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleSync(connection.id)}
-                          disabled={syncAccounts.isPending}
+                          onClick={() => handleSync(connection)}
+                          disabled={isSyncing}
                         >
-                          <RefreshCw className={`h-4 w-4 ${syncAccounts.isPending ? "animate-spin" : ""}`} />
+                          <RefreshCw className={`h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => setDisconnectingId(connection.id)}
+                          onClick={() => setDisconnectingConnection(connection)}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -201,8 +227,8 @@ export function ConnectedAccountsCard() {
       />
 
       <DeleteConfirmDialog
-        open={!!disconnectingId}
-        onOpenChange={(open) => !open && setDisconnectingId(null)}
+        open={!!disconnectingConnection}
+        onOpenChange={(open) => !open && setDisconnectingConnection(null)}
         onConfirm={handleDisconnect}
         title="Disconnect Bank"
         description="This will remove the connection and all synced data. You can reconnect at any time."

@@ -75,6 +75,8 @@ export type Database = {
           institution_id: string
           institution_name: string
           last_synced_at: string | null
+          provider: string
+          requisition_id: string | null
           status: string
           updated_at: string
           user_id: string
@@ -88,6 +90,8 @@ export type Database = {
           institution_id: string
           institution_name: string
           last_synced_at?: string | null
+          provider?: string
+          requisition_id?: string | null
           status?: string
           updated_at?: string
           user_id: string
@@ -101,6 +105,8 @@ export type Database = {
           institution_id?: string
           institution_name?: string
           last_synced_at?: string | null
+          provider?: string
+          requisition_id?: string | null
           status?: string
           updated_at?: string
           user_id?: string
