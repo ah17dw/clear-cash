@@ -3,21 +3,23 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Button } from "@/components/ui/button";
 import { usePlaidLink } from "react-plaid-link";
 import { useCreateLinkToken, useExchangeToken } from "@/hooks/useOpenBanking";
-import { Building2, Loader2, Link2, ArrowLeft, Sparkles } from "lucide-react";
+import { Building2, Loader2, Link2, ArrowLeft, Sparkles, Layers } from "lucide-react";
 import { NordigenBankSearchSheet } from "./NordigenBankSearchSheet";
+import { TrueLayerBankSheet } from "./TrueLayerBankSheet";
 
 interface ConnectBankSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-type ProviderChoice = null | "plaid" | "nordigen";
+type ProviderChoice = null | "plaid" | "nordigen" | "truelayer";
 
 export function ConnectBankSheet({ open, onOpenChange }: ConnectBankSheetProps) {
   const [providerChoice, setProviderChoice] = useState<ProviderChoice>(null);
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showNordigenSheet, setShowNordigenSheet] = useState(false);
+  const [showTrueLayerSheet, setShowTrueLayerSheet] = useState(false);
   
   const createLinkToken = useCreateLinkToken();
   const exchangeToken = useExchangeToken();
@@ -78,6 +80,12 @@ export function ConnectBankSheet({ open, onOpenChange }: ConnectBankSheetProps) 
     onOpenChange(false);
   };
 
+  const handleChooseTrueLayer = () => {
+    setProviderChoice("truelayer");
+    setShowTrueLayerSheet(true);
+    onOpenChange(false);
+  };
+
   const handleBack = () => {
     setProviderChoice(null);
     setLinkToken(null);
@@ -109,22 +117,39 @@ export function ConnectBankSheet({ open, onOpenChange }: ConnectBankSheetProps) 
       </div>
 
       <div className="space-y-3">
+        {/* TrueLayer - Recommended option */}
+        <Button
+          variant="outline"
+          className="w-full h-auto py-4 justify-start gap-4"
+          onClick={handleChooseTrueLayer}
+        >
+          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            <Layers className="h-5 w-5 text-primary" />
+          </div>
+          <div className="text-left flex-1">
+            <div className="flex items-center gap-2">
+              <p className="font-medium">TrueLayer</p>
+              <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
+                Recommended
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              UK's leading Open Banking platform. Fast, reliable connections.
+            </p>
+          </div>
+        </Button>
+
         {/* GoCardless/Nordigen - Free option */}
         <Button
           variant="outline"
           className="w-full h-auto py-4 justify-start gap-4"
           onClick={handleChooseNordigen}
         >
-          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <Sparkles className="h-5 w-5 text-primary" />
+          <div className="h-10 w-10 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+            <Sparkles className="h-5 w-5 text-secondary-foreground" />
           </div>
           <div className="text-left flex-1">
-            <div className="flex items-center gap-2">
-              <p className="font-medium">GoCardless (Free)</p>
-              <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
-                Recommended
-              </span>
-            </div>
+            <p className="font-medium">GoCardless</p>
             <p className="text-xs text-muted-foreground">
               Free UK bank connections via PSD2. Supports most UK banks.
             </p>
@@ -137,8 +162,8 @@ export function ConnectBankSheet({ open, onOpenChange }: ConnectBankSheetProps) 
           className="w-full h-auto py-4 justify-start gap-4"
           onClick={handleChoosePlaid}
         >
-          <div className="h-10 w-10 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-            <Building2 className="h-5 w-5 text-secondary-foreground" />
+          <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
+            <Building2 className="h-5 w-5 text-muted-foreground" />
           </div>
           <div className="text-left flex-1">
             <p className="font-medium">Plaid</p>
@@ -273,6 +298,11 @@ export function ConnectBankSheet({ open, onOpenChange }: ConnectBankSheetProps) 
       <NordigenBankSearchSheet 
         open={showNordigenSheet} 
         onOpenChange={setShowNordigenSheet}
+      />
+
+      <TrueLayerBankSheet
+        open={showTrueLayerSheet}
+        onOpenChange={setShowTrueLayerSheet}
       />
     </>
   );

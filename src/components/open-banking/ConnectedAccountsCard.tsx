@@ -12,6 +12,7 @@ import {
   ConnectedBankAccount 
 } from "@/hooks/useOpenBanking";
 import { useSyncNordigenAccounts, useDisconnectNordigenBank } from "@/hooks/useNordigen";
+import { useSyncTrueLayerAccounts, useDisconnectTrueLayerBank } from "@/hooks/useTrueLayer";
 import { ConnectBankSheet } from "./ConnectBankSheet";
 import { AccountLinkSheet } from "./AccountLinkSheet";
 import { TransactionsSheet } from "./TransactionsSheet";
@@ -24,7 +25,8 @@ import {
   ChevronRight,
   Clock,
   CheckCircle,
-  Sparkles
+  Sparkles,
+  Layers
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { AmountDisplay } from "@/components/ui/amount-display";
@@ -40,11 +42,13 @@ export function ConnectedAccountsCard() {
   const { data: accounts, isLoading: accountsLoading } = useSyncedBankAccounts();
   const syncPlaidAccounts = useSyncAccounts();
   const syncNordigenAccounts = useSyncNordigenAccounts();
+  const syncTrueLayerAccounts = useSyncTrueLayerAccounts();
   const disconnectPlaidBank = useDisconnectBank();
   const disconnectNordigenBank = useDisconnectNordigenBank();
+  const disconnectTrueLayerBank = useDisconnectTrueLayerBank();
 
   const isLoading = connectionsLoading || accountsLoading;
-  const isSyncing = syncPlaidAccounts.isPending || syncNordigenAccounts.isPending;
+  const isSyncing = syncPlaidAccounts.isPending || syncNordigenAccounts.isPending || syncTrueLayerAccounts.isPending;
 
   const getStatusBadge = (status: string, expiresAt: string | null) => {
     if (status === "expired") {
@@ -59,6 +63,8 @@ export function ConnectedAccountsCard() {
   const handleSync = async (connection: ConnectedBankAccount) => {
     if (connection.provider === "nordigen") {
       await syncNordigenAccounts.mutateAsync(connection.id);
+    } else if (connection.provider === "truelayer") {
+      await syncTrueLayerAccounts.mutateAsync(connection.id);
     } else {
       await syncPlaidAccounts.mutateAsync(connection.id);
     }
@@ -68,6 +74,8 @@ export function ConnectedAccountsCard() {
     if (disconnectingConnection) {
       if (disconnectingConnection.provider === "nordigen") {
         await disconnectNordigenBank.mutateAsync(disconnectingConnection.id);
+      } else if (disconnectingConnection.provider === "truelayer") {
+        await disconnectTrueLayerBank.mutateAsync(disconnectingConnection.id);
       } else {
         await disconnectPlaidBank.mutateAsync(disconnectingConnection.id);
       }
@@ -80,7 +88,15 @@ export function ConnectedAccountsCard() {
       return (
         <Badge variant="outline" className="text-xs gap-1">
           <Sparkles className="h-3 w-3" />
-          Free
+          GoCardless
+        </Badge>
+      );
+    }
+    if (provider === "truelayer") {
+      return (
+        <Badge variant="outline" className="text-xs gap-1">
+          <Layers className="h-3 w-3" />
+          TrueLayer
         </Badge>
       );
     }
