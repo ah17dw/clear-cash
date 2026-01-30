@@ -10,6 +10,7 @@ export default function OpenBankingCallback() {
     const consent = searchParams.get("consent");
     const error = searchParams.get("error");
     const ref = searchParams.get("ref");
+    const code = searchParams.get("code");
 
     if (window.opener) {
       if (provider === "nordigen") {
@@ -17,6 +18,13 @@ export default function OpenBankingCallback() {
         window.opener.postMessage({
           type: "nordigen-callback",
           ref: ref || searchParams.get("reference"),
+        }, window.location.origin);
+      } else if (provider === "truelayer") {
+        // TrueLayer callback - send code back to parent
+        window.opener.postMessage({
+          type: "truelayer-callback",
+          code,
+          error,
         }, window.location.origin);
       } else if (consent) {
         // Plaid callback
