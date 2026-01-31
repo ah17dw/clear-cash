@@ -32,9 +32,10 @@ export function TrueLayerBankSheet({ open, onOpenChange }: TrueLayerBankSheetPro
         
         if (code) {
           try {
+            const redirectUri = "https://ahfinance.lovable.app/truelayer/callback";
             await completeAuth.mutateAsync({
               code,
-              redirectUri: `${window.location.origin}/open-banking/callback?provider=truelayer`,
+              redirectUri,
               providerName: "TrueLayer Bank",
             });
             onOpenChange(false);
@@ -55,7 +56,7 @@ export function TrueLayerBankSheet({ open, onOpenChange }: TrueLayerBankSheetPro
     setIsConnecting(true);
     
     try {
-      const redirectUri = `${window.location.origin}/open-banking/callback?provider=truelayer`;
+      const redirectUri = "https://ahfinance.lovable.app/truelayer/callback";
       const result = await createAuthLink.mutateAsync({ 
         redirectUri,
         providerId: "uk-ob-all", // Connect to all UK banks
