@@ -1,17 +1,39 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
+// Helper to parse params from both query string and hash fragment
+function getAuthParams(search: string, hash: string) {
+  // First try query params
+  const queryParams = new URLSearchParams(search);
+  let code = queryParams.get("code");
+  let error = queryParams.get("error");
+  
+  // If not in query, check hash fragment (some OAuth providers use this)
+  if (!code && hash) {
+    const hashParams = new URLSearchParams(hash.replace("#", ""));
+    code = hashParams.get("code");
+    error = error || hashParams.get("error");
+  }
+  
+  return { code, error };
+}
+
 export default function TrueLayerCallback() {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const [status, setStatus] = useState<"processing" | "success" | "error">("processing");
   const [message, setMessage] = useState("Completing bank connection...");
 
   useEffect(() => {
     const completeAuth = async () => {
-      const code = searchParams.get("code");
-      const error = searchParams.get("error");
+      // Log for debugging
+      console.log("TrueLayer callback - URL:", window.location.href);
+      console.log("TrueLayer callback - search:", location.search);
+      console.log("TrueLayer callback - hash:", location.hash);
+      
+      const { code, error } = getAuthParams(location.search, location.hash);
 
       if (error) {
         setStatus("error");
