@@ -20,6 +20,7 @@ import History from "./pages/History";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import OpenBankingCallback from "./pages/OpenBankingCallback";
+import TrueLayerCallback from "./pages/TrueLayerCallback";
 
 const queryClient = new QueryClient();
 
@@ -145,6 +146,7 @@ function AppRoutes() {
           }
         />
         <Route path="/open-banking-callback" element={<OpenBankingCallback />} />
+        <Route path="/truelayer/callback" element={<TrueLayerCallback />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       {user && <BottomNav />}
