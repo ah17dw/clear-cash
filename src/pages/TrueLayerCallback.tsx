@@ -1,27 +1,47 @@
 import { useEffect, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 // Helper to parse params from both query string and hash fragment
 function getAuthParams(search: string, hash: string) {
-  // First try query params
   const queryParams = new URLSearchParams(search);
-  let code = queryParams.get("code");
-  let error = queryParams.get("error");
-  
-  // If not in query, check hash fragment (some OAuth providers use this)
+  const hashParams = new URLSearchParams(hash.replace("#", ""));
+
+  const queryKeys = Array.from(queryParams.keys());
+  const hashKeys = Array.from(hashParams.keys());
+
+  // Common OAuth param names (just in case the provider differs)
+  const codeKeys = ["code", "authorization_code", "auth_code"];
+  const errorKeys = ["error", "error_description", "error_code", "errorCode"];
+
+  const findFirst = (params: URLSearchParams, keys: string[]) => {
+    for (const k of keys) {
+      const v = params.get(k);
+      if (v) return v;
+    }
+    return null;
+  };
+
+  let code = findFirst(queryParams, codeKeys);
+  let error = findFirst(queryParams, errorKeys);
+
   if (!code && hash) {
-    const hashParams = new URLSearchParams(hash.replace("#", ""));
-    code = hashParams.get("code");
-    error = error || hashParams.get("error");
+    code = findFirst(hashParams, codeKeys);
+    error = error || findFirst(hashParams, errorKeys);
   }
-  
-  return { code, error };
+
+  return {
+    code,
+    error,
+    debug: {
+      queryKeys,
+      hashKeys,
+    },
+  };
 }
 
 export default function TrueLayerCallback() {
-  const [searchParams] = useSearchParams();
   const location = useLocation();
   const [status, setStatus] = useState<"processing" | "success" | "error">("processing");
   const [message, setMessage] = useState("Completing bank connection...");
@@ -33,7 +53,7 @@ export default function TrueLayerCallback() {
       console.log("TrueLayer callback - search:", location.search);
       console.log("TrueLayer callback - hash:", location.hash);
       
-      const { code, error } = getAuthParams(location.search, location.hash);
+      const { code, error, debug } = getAuthParams(location.search, location.hash);
 
       if (error) {
         setStatus("error");
@@ -43,7 +63,9 @@ export default function TrueLayerCallback() {
 
       if (!code) {
         setStatus("error");
-        setMessage("No authorization code received");
+        setMessage(
+          `No authorization code received. Received params: query=[${debug.queryKeys.join(", ")}], hash=[${debug.hashKeys.join(", ")}]`
+        );
         return;
       }
 
@@ -91,7 +113,7 @@ export default function TrueLayerCallback() {
     };
 
     completeAuth();
-  }, [searchParams]);
+  }, [location.search, location.hash]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
