@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useCreateTrueLayerAuthLink, useCompleteTrueLayerAuth } from "@/hooks/useTrueLayer";
-import { Building2, Loader2, Search, ExternalLink } from "lucide-react";
+import { useCreateTrueLayerAuthLink } from "@/hooks/useTrueLayer";
+import { Building2, Loader2, ExternalLink } from "lucide-react";
 
 interface TrueLayerBankSheetProps {
   open: boolean;
@@ -14,43 +14,24 @@ export function TrueLayerBankSheet({ open, onOpenChange }: TrueLayerBankSheetPro
   const [isConnecting, setIsConnecting] = useState(false);
   
   const createAuthLink = useCreateTrueLayerAuthLink();
-  const completeAuth = useCompleteTrueLayerAuth();
 
-  // Listen for OAuth callback
+  const queryClient = useQueryClient();
+
+  // Listen for success message from callback page
   useEffect(() => {
-    const handleMessage = async (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      
-      if (event.data?.type === "truelayer-callback") {
-        const { code, error } = event.data;
-        
-        if (error) {
-          console.error("TrueLayer auth error:", error);
-          setIsConnecting(false);
-          return;
-        }
-        
-        if (code) {
-          try {
-            const redirectUri = "https://ahfinance.lovable.app/truelayer/callback";
-            await completeAuth.mutateAsync({
-              code,
-              redirectUri,
-              providerName: "TrueLayer Bank",
-            });
-            onOpenChange(false);
-          } catch (err) {
-            console.error("Failed to complete auth:", err);
-          } finally {
-            setIsConnecting(false);
-          }
-        }
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "truelayer-success") {
+        // Refresh the data
+        queryClient.invalidateQueries({ queryKey: ["connected-bank-accounts"] });
+        queryClient.invalidateQueries({ queryKey: ["synced-bank-accounts"] });
+        setIsConnecting(false);
+        onOpenChange(false);
       }
     };
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [completeAuth, onOpenChange]);
+  }, [onOpenChange, queryClient]);
 
   const handleConnectBank = async () => {
     setIsConnecting(true);
@@ -141,13 +122,13 @@ export function TrueLayerBankSheet({ open, onOpenChange }: TrueLayerBankSheetPro
 
           <Button
             onClick={handleConnectBank}
-            disabled={isConnecting || completeAuth.isPending}
+            disabled={isConnecting}
             className="w-full"
           >
-            {isConnecting || completeAuth.isPending ? (
+            {isConnecting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                {completeAuth.isPending ? "Completing..." : "Connecting..."}
+                Connecting...
               </>
             ) : (
               <>
