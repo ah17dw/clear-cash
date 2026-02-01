@@ -95,7 +95,7 @@ async function listProviders(country: string = "gb") {
 
   // TrueLayer providers endpoint
   const response = await fetch(
-    `${TRUELAYER_AUTH_URL}/api/providers?client_id=${clientId}&response_type=code&response_mode=form_post&scope=info%20accounts%20balance%20transactions&providers=uk-ob-all`,
+    `${TRUELAYER_AUTH_URL}/api/providers?client_id=${clientId}&response_type=code&response_mode=query&scope=info%20accounts%20balance%20transactions&providers=uk-ob-all`,
     {
       method: "GET",
       headers: {
@@ -129,7 +129,8 @@ function buildAuthLink(redirectUri: string, providerId?: string): { authUrl: str
     redirect_uri: redirectUri,
     state,
     providers: providerId || "uk-ob-all",
-    response_mode: "form_post",
+    // IMPORTANT: SPA callback routes can't read POST bodies, so we need the code in the URL.
+    response_mode: "query",
   });
 
   return {
