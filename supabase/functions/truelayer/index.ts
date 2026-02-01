@@ -287,7 +287,7 @@ Deno.serve(async (req) => {
       }
 
       case "complete-auth": {
-        const { code, redirectUri, providerName } = params;
+        const { code, redirectUri } = params;
         if (!code || !redirectUri) {
           throw new Error("code and redirectUri are required");
         }
@@ -302,13 +302,59 @@ Deno.serve(async (req) => {
           throw new Error("No accounts found with this bank connection");
         }
 
+        // Extract bank name from the first account's provider info
+        // TrueLayer returns provider info in various formats
+        const firstAccount = accounts[0];
+        let institutionId = "truelayer";
+        let institutionName = "Connected Bank";
+        
+        // Try to get provider info from account
+        if (firstAccount?.provider?.provider_id) {
+          institutionId = firstAccount.provider.provider_id;
+          institutionName = firstAccount.provider.display_name || firstAccount.provider.provider_id;
+        } else if (firstAccount?.provider?.display_name) {
+          institutionName = firstAccount.provider.display_name;
+        }
+        
+        // Map common UK bank connector IDs to friendly names
+        const bankNameMap: Record<string, string> = {
+          "ob-natwest": "NatWest",
+          "ob-rbs": "Royal Bank of Scotland",
+          "ob-hsbc": "HSBC",
+          "ob-barclays": "Barclays",
+          "ob-lloyds": "Lloyds Bank",
+          "ob-halifax": "Halifax",
+          "ob-santander": "Santander",
+          "ob-nationwide": "Nationwide",
+          "ob-tsb": "TSB",
+          "ob-monzo": "Monzo",
+          "ob-starling": "Starling Bank",
+          "ob-revolut": "Revolut",
+          "ob-chase": "Chase UK",
+          "ob-first-direct": "First Direct",
+        };
+        
+        // Check if we can extract connector_id from JWT claims
+        try {
+          const tokenParts = tokenData.access_token.split('.');
+          if (tokenParts.length === 3) {
+            const payload = JSON.parse(atob(tokenParts[1]));
+            if (payload.connector_id) {
+              institutionId = payload.connector_id;
+              institutionName = bankNameMap[payload.connector_id] || payload.connector_id.replace("ob-", "").replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+            }
+          }
+        } catch (e) {
+          console.log("Could not parse JWT for connector_id, using account provider info");
+        }
+
         // Store the connection in database
         const { data: connection, error: insertError } = await supabase
           .from("connected_bank_accounts")
           .insert({
             user_id: user.id,
-            institution_id: accounts[0]?.provider?.provider_id || "truelayer",
-            institution_name: providerName || accounts[0]?.provider?.display_name || "TrueLayer Bank",
+            institution_id: institutionId,
+            institution_name: institutionName,
             consent_token: tokenData.access_token,
             consent_expires_at: tokenData.refresh_token
               ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
@@ -327,28 +373,36 @@ Deno.serve(async (req) => {
 
         // Sync accounts immediately
         for (const account of accounts) {
-          const balance = await getAccountBalance(
-            tokenData.access_token,
-            account.account_id
-          );
+          try {
+            const balance = await getAccountBalance(
+              tokenData.access_token,
+              account.account_id
+            );
 
-          await supabase.from("synced_bank_accounts").upsert(
-            {
-              user_id: user.id,
-              connection_id: connection.id,
-              external_account_id: account.account_id,
-              account_type: account.account_type || "unknown",
-              account_name:
-                account.display_name ||
-                account.account_number?.number ||
-                "Bank Account",
-              currency: balance?.currency || "GBP",
-              balance: balance?.current || 0,
-              available_balance: balance?.available || null,
-              last_synced_at: new Date().toISOString(),
-            },
-            { onConflict: "external_account_id" }
-          );
+            const { error: syncError } = await supabase.from("synced_bank_accounts").upsert(
+              {
+                user_id: user.id,
+                connection_id: connection.id,
+                external_account_id: account.account_id,
+                account_type: account.account_type || "unknown",
+                account_name:
+                  account.display_name ||
+                  account.account_number?.number ||
+                  "Bank Account",
+                currency: balance?.currency || "GBP",
+                balance: balance?.current || 0,
+                available_balance: balance?.available || null,
+                last_synced_at: new Date().toISOString(),
+              },
+              { onConflict: "external_account_id" }
+            );
+            
+            if (syncError) {
+              console.error("Failed to sync account:", syncError);
+            }
+          } catch (accountErr) {
+            console.error("Error syncing account:", accountErr);
+          }
         }
 
         // Update last_synced_at on connection
@@ -361,6 +415,7 @@ Deno.serve(async (req) => {
           success: true,
           connectionId: connection.id,
           accountsCount: accounts.length,
+          institutionName,
         };
         break;
       }
