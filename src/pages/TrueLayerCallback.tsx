@@ -108,7 +108,16 @@ export default function TrueLayerCallback() {
       } catch (err) {
         console.error("Failed to complete auth:", err);
         setStatus("error");
-        setMessage(err instanceof Error ? err.message : "Failed to connect bank");
+        const errorMsg = err instanceof Error ? err.message : "Failed to connect bank";
+        
+        // Provide helpful guidance based on error
+        if (errorMsg.includes("expired")) {
+          setMessage("The authorization expired. Please close this window and try again.");
+        } else if (errorMsg.includes("invalid")) {
+          setMessage("There was an issue with the bank connection. Please try again.");
+        } else {
+          setMessage(errorMsg);
+        }
       }
     };
 
