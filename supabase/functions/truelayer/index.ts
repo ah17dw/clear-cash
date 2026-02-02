@@ -63,6 +63,8 @@ async function exchangeAuthCode(
     throw new Error("TrueLayer credentials not configured");
   }
 
+  console.log("Exchanging auth code with redirect_uri:", redirectUri);
+
   const response = await fetch(`${TRUELAYER_AUTH_URL}/connect/token`, {
     method: "POST",
     headers: {
@@ -80,7 +82,23 @@ async function exchangeAuthCode(
   if (!response.ok) {
     const errorText = await response.text();
     console.error("TrueLayer token exchange error:", errorText);
-    throw new Error(`Failed to exchange code: ${errorText}`);
+    
+    // Parse the error for better user messaging
+    try {
+      const errorJson = JSON.parse(errorText);
+      if (errorJson.error === "invalid_grant") {
+        throw new Error("The authorization code has expired. Please try connecting again.");
+      }
+      if (errorJson.error === "invalid_request") {
+        throw new Error(`Bank connection failed: ${errorJson.error_description || "Invalid request"}`);
+      }
+      throw new Error(errorJson.error_description || errorJson.error || "Failed to connect bank");
+    } catch (parseErr) {
+      if (parseErr instanceof Error && parseErr.message.includes("expired")) {
+        throw parseErr;
+      }
+      throw new Error(`Failed to exchange code: ${errorText}`);
+    }
   }
 
   return await response.json();
