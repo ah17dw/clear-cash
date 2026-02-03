@@ -38,7 +38,7 @@ async function getClientCredentialsToken(): Promise<string> {
       grant_type: "client_credentials",
       client_id: clientId,
       client_secret: clientSecret,
-      scope: "info accounts balance transactions",
+      scope: "info accounts balance transactions offline_access",
     }),
   });
 
@@ -143,7 +143,8 @@ function buildAuthLink(redirectUri: string, providerId?: string): { authUrl: str
   const params = new URLSearchParams({
     response_type: "code",
     client_id: clientId,
-    scope: "info accounts balance transactions",
+    // offline_access scope is required for refresh tokens (long-lived access)
+    scope: "info accounts balance transactions offline_access",
     redirect_uri: redirectUri,
     state,
     providers: providerId || "uk-ob-all",
@@ -367,19 +368,29 @@ Deno.serve(async (req) => {
         }
 
         // Store the connection in database
+        // If we have a refresh_token, store it and set 90-day expiry
+        // Otherwise use access token with its natural expiry (but minimum 1 day for usability)
+        const refreshToken = tokenData.refresh_token;
+        const expiresAt = refreshToken 
+          ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) // 90 days with refresh
+          : new Date(Date.now() + Math.max(tokenData.expires_in * 1000, 24 * 60 * 60 * 1000)); // Min 1 day
+        
+        console.log("Token info - has refresh:", !!refreshToken, "expires_in:", tokenData.expires_in, "calculated expiry:", expiresAt.toISOString());
+        
         const { data: connection, error: insertError } = await supabase
           .from("connected_bank_accounts")
           .insert({
             user_id: user.id,
             institution_id: institutionId,
             institution_name: institutionName,
-            consent_token: tokenData.access_token,
-            consent_expires_at: tokenData.refresh_token
-              ? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
-              : new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
+            // Store refresh token if available, otherwise access token
+            consent_token: refreshToken || tokenData.access_token,
+            consent_expires_at: expiresAt.toISOString(),
             provider: "truelayer",
             account_ids: accounts.map((a: any) => a.account_id),
             status: "active",
+            // Store access token separately in requisition_id for now (we'll use it for immediate API calls)
+            requisition_id: tokenData.access_token,
           })
           .select()
           .single();
