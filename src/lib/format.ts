@@ -1,12 +1,19 @@
 import { format, parseISO, differenceInDays } from 'date-fns';
 
-export function formatCurrency(amount: number): string {
+export function formatCurrency(amount: number | string | null | undefined): string {
+  // Defensive handling: Supabase sometimes returns numeric strings
+  const numericAmount = typeof amount === 'string' ? parseFloat(amount) : (amount ?? 0);
+  
+  if (isNaN(numericAmount)) {
+    return '£0.00';
+  }
+  
   return new Intl.NumberFormat('en-GB', {
     style: 'currency',
     currency: 'GBP',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(numericAmount);
 }
 
 export function formatPercentage(value: number): string {

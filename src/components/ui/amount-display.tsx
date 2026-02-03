@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/format';
 
 interface AmountDisplayProps {
-  amount: number;
+  amount: number | string | null | undefined;
   size?: 'sm' | 'md' | 'lg';
   showSign?: boolean;
   className?: string;
@@ -11,8 +11,11 @@ interface AmountDisplayProps {
 
 const AmountDisplay = React.forwardRef<HTMLSpanElement, AmountDisplayProps>(
   ({ amount, size = 'md', showSign = false, className }, ref) => {
-    const isPositive = amount >= 0;
-    const displayAmount = showSign && isPositive ? `+${formatCurrency(amount)}` : formatCurrency(amount);
+    // Defensive: handle string numbers from Supabase
+    const numericAmount = typeof amount === 'string' ? parseFloat(amount) : (amount ?? 0);
+    const safeAmount = isNaN(numericAmount) ? 0 : numericAmount;
+    const isPositive = safeAmount >= 0;
+    const displayAmount = showSign && isPositive ? `+${formatCurrency(safeAmount)}` : formatCurrency(safeAmount);
 
     return (
       <span
