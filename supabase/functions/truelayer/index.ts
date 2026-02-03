@@ -315,10 +315,17 @@ Deno.serve(async (req) => {
         const tokenData = await exchangeAuthCode(code, redirectUri);
 
         // Get accounts to verify connection and store metadata
-        const accounts = await getAccounts(tokenData.access_token);
+        let accounts = [];
+        try {
+          accounts = await getAccounts(tokenData.access_token);
+        } catch (accountsErr) {
+          console.error("Failed to fetch accounts from bank:", accountsErr);
+          throw new Error("This bank didn't share any accounts. Please try again and ensure you select at least one account during authorization.");
+        }
 
         if (accounts.length === 0) {
-          throw new Error("No accounts found with this bank connection");
+          console.error("Bank returned empty accounts list");
+          throw new Error("This bank didn't share any accounts. Please try again and ensure you select at least one account during authorization.");
         }
 
         // Extract bank name from the first account's provider info
