@@ -58,6 +58,14 @@ export default function TrueLayerCallback() {
       if (error) {
         setStatus("error");
         setMessage(`Authorization failed: ${error}`);
+
+        if (window.opener) {
+          try {
+            window.opener.postMessage({ type: "truelayer-error", message: `Authorization failed: ${error}` }, "*");
+          } catch {
+            // Ignore cross-origin errors
+          }
+        }
         return;
       }
 
@@ -66,6 +74,20 @@ export default function TrueLayerCallback() {
         setMessage(
           `No authorization code received. Received params: query=[${debug.queryKeys.join(", ")}], hash=[${debug.hashKeys.join(", ")}]`
         );
+
+        if (window.opener) {
+          try {
+            window.opener.postMessage(
+              {
+                type: "truelayer-error",
+                message: `No authorization code received. Received params: query=[${debug.queryKeys.join(", ")}], hash=[${debug.hashKeys.join(", ")}]`,
+              },
+              "*"
+            );
+          } catch {
+            // Ignore cross-origin errors
+          }
+        }
         return;
       }
 
@@ -111,12 +133,21 @@ export default function TrueLayerCallback() {
         const errorMsg = err instanceof Error ? err.message : "Failed to connect bank";
         
         // Provide helpful guidance based on error
+        let displayMessage = errorMsg;
         if (errorMsg.includes("expired")) {
-          setMessage("The authorization expired. Please close this window and try again.");
+          displayMessage = "The authorization expired. Please close this window and try again.";
         } else if (errorMsg.includes("invalid")) {
-          setMessage("There was an issue with the bank connection. Please try again.");
-        } else {
-          setMessage(errorMsg);
+          displayMessage = "There was an issue with the bank connection. Please try again.";
+        }
+
+        setMessage(displayMessage);
+
+        if (window.opener) {
+          try {
+            window.opener.postMessage({ type: "truelayer-error", message: displayMessage }, "*");
+          } catch {
+            // Ignore cross-origin errors
+          }
         }
       }
     };
