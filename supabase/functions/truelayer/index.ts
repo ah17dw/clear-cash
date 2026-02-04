@@ -21,6 +21,10 @@ interface TrueLayerTokenResponse {
   scope: string;
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function getClientCredentialsToken(): Promise<string> {
   const clientId = Deno.env.get("TRUELAYER_CLIENT_ID");
   const clientSecret = Deno.env.get("TRUELAYER_CLIENT_SECRET");
@@ -315,17 +319,38 @@ Deno.serve(async (req) => {
         const tokenData = await exchangeAuthCode(code, redirectUri);
 
         // Get accounts to verify connection and store metadata
-        let accounts = [];
-        try {
-          accounts = await getAccounts(tokenData.access_token);
-        } catch (accountsErr) {
-          console.error("Failed to fetch accounts from bank:", accountsErr);
-          throw new Error("This bank didn't share any accounts. Please try again and ensure you select at least one account during authorization.");
+        // Some banks can briefly return an empty list right after consent; retry a couple times.
+        const maxAttempts = 3;
+        let accounts: any[] = [];
+        let lastAccountsErr: unknown = null;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            accounts = await getAccounts(tokenData.access_token);
+            lastAccountsErr = null;
+          } catch (accountsErr) {
+            lastAccountsErr = accountsErr;
+            console.error(`Failed to fetch accounts from bank (attempt ${attempt}/${maxAttempts}):`, accountsErr);
+          }
+
+          if (accounts.length > 0) break;
+          if (attempt < maxAttempts) {
+            await sleep(800 * attempt);
+          }
+        }
+
+        if (lastAccountsErr) {
+          // Keep user messaging friendly but log detailed error above.
+          throw new Error(
+            "The bank didn't return accounts. Please try again. If you see multiple Barclays options, choose 'Barclays' (not 'Barclaycard') and make sure you select at least one account during consent."
+          );
         }
 
         if (accounts.length === 0) {
-          console.error("Bank returned empty accounts list");
-          throw new Error("This bank didn't share any accounts. Please try again and ensure you select at least one account during authorization.");
+          console.error("Bank returned empty accounts list after retries");
+          throw new Error(
+            "The bank didn't return any accounts. Please try again and ensure you select at least one account during consent. If this keeps happening with Barclays, it may be a bank-side limitation."
+          );
         }
 
         // Extract bank name from the first account's provider info

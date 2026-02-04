@@ -4,6 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Button } from "@/components/ui/button";
 import { useCreateTrueLayerAuthLink } from "@/hooks/useTrueLayer";
 import { Building2, Loader2, ExternalLink } from "lucide-react";
+import { toast } from "sonner";
 
 interface TrueLayerBankSheetProps {
   open: boolean;
@@ -26,6 +27,11 @@ export function TrueLayerBankSheet({ open, onOpenChange }: TrueLayerBankSheetPro
         queryClient.invalidateQueries({ queryKey: ["synced-bank-accounts"] });
         setIsConnecting(false);
         onOpenChange(false);
+      }
+
+      if (event.data?.type === "truelayer-error") {
+        setIsConnecting(false);
+        toast.error(event.data?.message || "Bank connection failed");
       }
     };
 
