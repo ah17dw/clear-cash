@@ -1120,6 +1120,36 @@ export type Database = {
         }
         Relationships: []
       }
+      truelayer_oauth_states: {
+        Row: {
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          provider_id: string | null
+          redirect_uri: string
+          state: string
+          user_id: string
+        }
+        Insert: {
+          consumed_at?: string | null
+          created_at?: string
+          expires_at: string
+          provider_id?: string | null
+          redirect_uri: string
+          state: string
+          user_id: string
+        }
+        Update: {
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          provider_id?: string | null
+          redirect_uri?: string
+          state?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null

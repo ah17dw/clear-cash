@@ -14,6 +14,7 @@ function getAuthParams(search: string, hash: string) {
   // Common OAuth param names (just in case the provider differs)
   const codeKeys = ["code", "authorization_code", "auth_code"];
   const errorKeys = ["error", "error_description", "error_code", "errorCode"];
+  const stateKeys = ["state"];
 
   const findFirst = (params: URLSearchParams, keys: string[]) => {
     for (const k of keys) {
@@ -25,15 +26,18 @@ function getAuthParams(search: string, hash: string) {
 
   let code = findFirst(queryParams, codeKeys);
   let error = findFirst(queryParams, errorKeys);
+  let state = findFirst(queryParams, stateKeys);
 
   if (!code && hash) {
     code = findFirst(hashParams, codeKeys);
     error = error || findFirst(hashParams, errorKeys);
+    state = state || findFirst(hashParams, stateKeys);
   }
 
   return {
     code,
     error,
+    state,
     debug: {
       queryKeys,
       hashKeys,
@@ -53,7 +57,7 @@ export default function TrueLayerCallback() {
       console.log("TrueLayer callback - search:", location.search);
       console.log("TrueLayer callback - hash:", location.hash);
       
-      const { code, error, debug } = getAuthParams(location.search, location.hash);
+      const { code, error, state, debug } = getAuthParams(location.search, location.hash);
 
       if (error) {
         setStatus("error");
@@ -100,6 +104,7 @@ export default function TrueLayerCallback() {
             action: "complete-auth", 
             code, 
             redirectUri,
+            state,
             providerName: "TrueLayer Bank" 
           },
         });
