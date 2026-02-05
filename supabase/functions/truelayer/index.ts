@@ -25,6 +25,28 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function requireUserIdFromAuthHeader(
+  // Supabase edge runtime type inference can be finicky; keep this permissive.
+  supabase: any,
+  authHeader: string | null
+): Promise<string> {
+  if (!authHeader) {
+    throw new Error("Unauthorized");
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser(token);
+
+  if (userError || !user) {
+    throw new Error("Invalid token");
+  }
+
+  return user.id;
+}
+
 async function getClientCredentialsToken(): Promise<string> {
   const clientId = Deno.env.get("TRUELAYER_CLIENT_ID");
   const clientSecret = Deno.env.get("TRUELAYER_CLIENT_SECRET");
@@ -264,28 +286,7 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get user from auth header
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser(token);
-
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const { action, ...params } = await req.json();
     console.info(`TrueLayer action: ${action}`);
 
@@ -293,26 +294,85 @@ Deno.serve(async (req) => {
 
     switch (action) {
       case "list-providers": {
+        // Keep this protected to avoid turning the function into a public proxy.
+        await requireUserIdFromAuthHeader(supabase, authHeader);
         const providers = await listProviders(params.country || "gb");
         result = { providers };
         break;
       }
 
       case "create-auth-link": {
+        const userId = await requireUserIdFromAuthHeader(supabase, authHeader);
         const { redirectUri, providerId } = params;
         if (!redirectUri) {
           throw new Error("redirectUri is required");
         }
 
         const authLink = buildAuthLink(redirectUri, providerId);
+
+        // Store state so the callback can complete auth even if the popup isn't logged in
+        // (e.g. connecting from preview domain while callback is on published domain).
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
+        const { error: stateInsertError } = await supabase
+          .from("truelayer_oauth_states")
+          .insert({
+            state: authLink.state,
+            user_id: userId,
+            redirect_uri: redirectUri,
+            provider_id: providerId || null,
+            expires_at: expiresAt,
+          });
+
+        if (stateInsertError) {
+          console.error("Failed to store OAuth state:", stateInsertError);
+          throw new Error("Failed to start bank connection");
+        }
+
         result = authLink;
         break;
       }
 
       case "complete-auth": {
-        const { code, redirectUri } = params;
+        const { code, redirectUri, state } = params;
         if (!code || !redirectUri) {
           throw new Error("code and redirectUri are required");
+        }
+
+        // Determine user: either via auth header (normal in-app flow)
+        // or via stored OAuth state (callback window may not have a session).
+        let userId: string | null = null;
+        let usedState = false;
+
+        if (authHeader) {
+          userId = await requireUserIdFromAuthHeader(supabase, authHeader);
+        } else if (state) {
+          const { data: stateRow, error: stateError } = await supabase
+            .from("truelayer_oauth_states")
+            .select("state,user_id,redirect_uri,expires_at,consumed_at")
+            .eq("state", state)
+            .maybeSingle();
+
+          if (stateError) {
+            console.error("Failed to read OAuth state:", stateError);
+            throw new Error("Authorization session expired. Please start again.");
+          }
+
+          if (!stateRow || stateRow.consumed_at) {
+            throw new Error("Authorization session expired. Please start again.");
+          }
+
+          if (stateRow.redirect_uri !== redirectUri) {
+            throw new Error("Authorization session mismatch. Please start again.");
+          }
+
+          if (new Date(stateRow.expires_at).getTime() < Date.now()) {
+            throw new Error("Authorization session expired. Please start again.");
+          }
+
+          userId = stateRow.user_id;
+          usedState = true;
+        } else {
+          throw new Error("Unauthorized");
         }
 
         // Exchange the authorization code for tokens
@@ -412,7 +472,7 @@ Deno.serve(async (req) => {
         const { data: connection, error: insertError } = await supabase
           .from("connected_bank_accounts")
           .insert({
-            user_id: user.id,
+            user_id: userId,
             institution_id: institutionId,
             institution_name: institutionName,
             // Store refresh token if available, otherwise access token
@@ -442,7 +502,7 @@ Deno.serve(async (req) => {
 
             const { error: syncError } = await supabase.from("synced_bank_accounts").upsert(
               {
-                user_id: user.id,
+                user_id: userId,
                 connection_id: connection.id,
                 external_account_id: account.account_id,
                 account_type: account.account_type || "unknown",
@@ -472,6 +532,14 @@ Deno.serve(async (req) => {
           .update({ last_synced_at: new Date().toISOString() })
           .eq("id", connection.id);
 
+        // Consume state on success (single-use)
+        if (usedState && state) {
+          await supabase
+            .from("truelayer_oauth_states")
+            .update({ consumed_at: new Date().toISOString() })
+            .eq("state", state);
+        }
+
         result = {
           success: true,
           connectionId: connection.id,
@@ -482,6 +550,7 @@ Deno.serve(async (req) => {
       }
 
       case "sync-accounts": {
+        const userId = await requireUserIdFromAuthHeader(supabase, authHeader);
         const { connectionId } = params;
         if (!connectionId) {
           throw new Error("connectionId is required");
@@ -492,7 +561,7 @@ Deno.serve(async (req) => {
           .from("connected_bank_accounts")
           .select("*")
           .eq("id", connectionId)
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .eq("provider", "truelayer")
           .single();
 
@@ -513,7 +582,7 @@ Deno.serve(async (req) => {
             .from("synced_bank_accounts")
             .upsert(
               {
-                user_id: user.id,
+                user_id: userId,
                 connection_id: connectionId,
                 external_account_id: account.account_id,
                 account_type: account.account_type || "unknown",
@@ -567,7 +636,7 @@ Deno.serve(async (req) => {
                 .from("synced_transactions")
                 .upsert(
                   {
-                    user_id: user.id,
+                    user_id: userId,
                     synced_account_id: syncedAccount.id,
                     external_transaction_id: tx.transaction_id,
                     amount: tx.amount,
@@ -599,7 +668,7 @@ Deno.serve(async (req) => {
             for (const order of standingOrders) {
               await supabase.from("synced_standing_orders").upsert(
                 {
-                  user_id: user.id,
+                  user_id: userId,
                   synced_account_id: syncedAccount.id,
                   external_order_id: order.standing_order_id || crypto.randomUUID(),
                   amount: order.amount,
@@ -635,6 +704,7 @@ Deno.serve(async (req) => {
       }
 
       case "disconnect": {
+        const userId = await requireUserIdFromAuthHeader(supabase, authHeader);
         const { connectionId } = params;
         if (!connectionId) {
           throw new Error("connectionId is required");
@@ -669,7 +739,7 @@ Deno.serve(async (req) => {
           .from("connected_bank_accounts")
           .delete()
           .eq("id", connectionId)
-          .eq("user_id", user.id);
+          .eq("user_id", userId);
 
         result = { success: true };
         break;

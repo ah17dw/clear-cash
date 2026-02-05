@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.analyze-credit-report]
 verify_jwt = false
+
+[functions.truelayer]
+verify_jwt = false
