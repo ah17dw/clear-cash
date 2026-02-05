@@ -8,6 +8,7 @@ import { useCreditReportUploads } from '@/hooks/useCreditReportUploads';
 import { CreditUploadHistorySheet } from './CreditUploadHistorySheet';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Select,
   SelectContent,
@@ -293,6 +294,12 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
     setExpandedItems(new Set());
     
     try {
+      // Get the user's session for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Not authenticated');
+      }
+
       const allEntries: CreditEntry[] = [];
       let processedFiles = 0;
       
@@ -306,7 +313,7 @@ export function CreditReportUpload({ debts, onUpdateDebt, onAddDebt }: CreditRep
           {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              Authorization: `Bearer ${session.access_token}`,
             },
             body: formData,
           }
